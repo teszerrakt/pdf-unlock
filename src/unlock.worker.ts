@@ -4,6 +4,7 @@ import wasmUrl from '@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url'
 export type WorkerRequest = { type: 'open'; file: File } | { type: 'unlock'; password: string }
 
 export type WorkerResponse =
+  | { type: 'decrypting' }
   | { type: 'not-encrypted' }
   | { type: 'needs-password' }
   | { type: 'wrong-password' }
@@ -50,7 +51,11 @@ async function decrypt(password: string | null): Promise<WorkerResponse> {
 async function open(file: File): Promise<WorkerResponse> {
   input = new Uint8Array(await file.arrayBuffer())
   const { code, errors } = await qpdf(['--is-encrypted', '/in.pdf'])
-  if (code === 0) return decrypt(null) // encrypted, but opens without a password: owner restrictions only
+  if (code === 0) {
+    // Encrypted, but opens without a password: owner restrictions only.
+    self.postMessage({ type: 'decrypting' } satisfies WorkerResponse)
+    return decrypt(null)
+  }
   if (isPasswordError(errors)) return { type: 'needs-password' }
   if (code === 2 && !errors) return { type: 'not-encrypted' }
   return { type: 'error', message: readable(errors) }
