@@ -118,6 +118,7 @@ function clear() {
 
 function reset() {
   clear()
+  if (updateReady) return location.reload()
   show('pick')
 }
 
@@ -369,6 +370,16 @@ async function takeSharedFile() {
 }
 
 takeSharedFile()
+
+// sw.ts takes over as soon as a new build installs, but this page still runs the old one.
+// Reload into it when nothing is in progress, else on the next return to the start screen.
+let updateReady = false
+if (navigator.serviceWorker?.controller) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    updateReady = true
+    if (current === 'pick' && !about.open) location.reload()
+  })
+}
 
 const builtAt = new Date(__BUILT_AT__)
 const offlineReady = !!navigator.serviceWorker?.controller
