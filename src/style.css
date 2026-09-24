@@ -943,6 +943,11 @@ dialog[open] {
   animation: sheet-up 0.42s var(--ease) both;
 }
 
+/* On short screens the sheet scrolls; without this its children squash to fit. */
+dialog > * {
+  flex-shrink: 0;
+}
+
 dialog.closing {
   animation: sheet-down 0.28s cubic-bezier(0.4, 0, 1, 1) both;
 }
