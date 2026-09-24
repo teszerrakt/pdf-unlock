@@ -1,4 +1,4 @@
-# PDF Unlock
+# Sphynx: PDF Unlock
 
 A PWA that removes the password from a PDF. It runs entirely in the browser: the file and the
 password never leave the device.
@@ -21,7 +21,7 @@ password never leave the device.
 
 | Platform | In | Out |
 | --- | --- | --- |
-| iPhone / iPad | File picker (Files, iCloud Drive) | Download, or **Share** (Save to Files, AirDrop, Mail…) |
+| iPhone / iPad | File picker (Files, iCloud Drive) | **Save or share** (Save to Files, AirDrop, Mail…) |
 | Android | File picker, paste, **Share sheet** after install | Download or **Share** |
 | Desktop | File picker, drag and drop, paste, "Open with" after install (Chromium) | Download or **Share** |
 
@@ -56,7 +56,10 @@ directory and headers.
 **Cloudflare Pages**: build command `npm run build`, output directory `dist`. Or run
 `npm run build && npx wrangler pages deploy dist`.
 
-## Icons
+## Art and icons
 
-`public/icon.svg` is the source. Regenerate the PNGs with `npx @vite-pwa/assets-generator@1`
-(reads `pwa-assets.config.mjs`).
+The cat drawings and the app icon come from the ink originals in `art/` (not committed: about
+2 MB each). `scripts/art.mjs` turns them into the masks in `public/art/` and the PWA icons in
+`public/`. Run `npm i --no-save sharp && node scripts/art.mjs`.
+
+Keep the originals out of `public/`: everything there is shipped and precached.
