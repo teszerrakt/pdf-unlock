@@ -21,7 +21,7 @@ password never leave the device.
 
 | Platform | In | Out |
 | --- | --- | --- |
-| iPhone / iPad | File picker (Files, iCloud Drive) | Download, or **Share** (Save to Files, AirDrop, Mail…) |
+| iPhone / iPad | File picker (Files, iCloud Drive) | **Save or share** (Save to Files, AirDrop, Mail…) |
 | Android | File picker, paste, **Share sheet** after install | Download or **Share** |
 | Desktop | File picker, drag and drop, paste, "Open with" after install (Chromium) | Download or **Share** |
 

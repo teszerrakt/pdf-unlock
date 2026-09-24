@@ -897,7 +897,7 @@ kbd {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(150px + env(safe-area-inset-bottom));
+  bottom: calc(176px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -919,44 +919,128 @@ kbd {
   stroke-width: 2.4;
 }
 
-/* How it works */
+/* How it works: a bottom sheet on phones, a card on desktop. */
 
 dialog {
-  width: min(440px, calc(100% - 32px));
-  padding: 24px;
-  border: 1px solid var(--hairline);
-  border-radius: 24px;
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100dvh - 48px);
+  margin: auto auto 0;
+  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  border: 0;
+  border-radius: 28px 28px 0 0;
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 24px 48px -24px rgba(60, 40, 15, 0.45);
+  box-shadow: 0 -16px 40px -24px rgba(60, 40, 15, 0.45);
+  overflow-y: auto;
 }
 
 dialog[open] {
-  animation: rise 0.34s var(--ease) both;
+  animation: sheet-up 0.42s var(--ease) both;
 }
 
 dialog::backdrop {
   background: rgba(30, 26, 20, 0.35);
-  animation: fade 0.2s ease both;
+  animation: out 0.25s ease reverse both;
 }
 
-dialog h2 {
-  font-size: 32px;
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-dialog ul {
-  margin: 16px 0 0;
-  padding-left: 1.1rem;
+.about-head h2 {
+  flex-grow: 1;
+  font-size: 30px;
+}
+
+.about-head .round svg {
+  width: 18px;
+  height: 18px;
+}
+
+.how-steps {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   font-size: 15px;
 }
 
+.how-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.how-steps span {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--tint);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.facts {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 4px 16px;
+  border-radius: 20px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+}
+
+.facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.facts li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.facts strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.facts .feature-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  display: grid;
+  place-items: center;
+}
+
+.facts svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
+}
+
 .version {
-  margin: 16px 0 20px;
+  margin: 16px 0 0;
+  text-align: center;
   font-size: 12px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Desktop */
@@ -1225,6 +1309,18 @@ dialog ul {
   .toast {
     bottom: 48px;
   }
+
+  dialog {
+    margin: auto;
+    padding: 24px;
+    border: 1px solid var(--hairline);
+    border-radius: 28px;
+    box-shadow: 0 24px 48px -24px rgba(60, 40, 15, 0.45);
+  }
+
+  dialog[open] {
+    animation: rise 0.34s var(--ease) both;
+  }
 }
 
 /* Motion */
@@ -1246,6 +1342,12 @@ dialog ul {
 @keyframes out {
   to {
     opacity: 0;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
   }
 }
 

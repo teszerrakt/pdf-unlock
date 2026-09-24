@@ -28,6 +28,10 @@ const toastBox = byId('toast')
 const about = byId<HTMLDialogElement>('about')
 const install = byId<HTMLButtonElement>('install')
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
+const platform =
+  (navigator as { userAgentData?: { platform: string } }).userAgentData?.platform || navigator.platform || navigator.userAgent
+// iPadOS reports a Mac platform; touch tells them apart.
+const isIos = /iphone|ipad|ipod/i.test(platform) || (/mac/i.test(platform) && navigator.maxTouchPoints > 1)
 
 // Work that ends within this many ms skips the Unlocking screen, so a quick answer does not flash it.
 const PATIENCE = 300
@@ -190,7 +194,11 @@ function finish(pdf: Uint8Array, hadPassword: boolean) {
   download.href = downloadUrl
   download.download = name
   const canShare = !!navigator.canShare?.({ files: [unlocked] })
+  // iOS opens a downloaded PDF in a viewer instead of saving it; its share sheet has Save to Files.
+  const shareOnly = canShare && isIos
   share.hidden = !canShare
+  byId('share-label').textContent = shareOnly ? 'Save or share' : 'Share'
+  download.hidden = shareOnly
   download.classList.toggle('primary', !canShare)
   download.classList.toggle('secondary', canShare)
   byId('done-name').textContent = name
@@ -249,7 +257,7 @@ share.addEventListener('click', async () => {
   if (!unlocked) return
   try {
     await navigator.share({ files: [unlocked] })
-    toast('Shared')
+    toast('Done')
   } catch {
     // Closing the share sheet rejects; nothing to do.
   }
@@ -280,8 +288,6 @@ install.addEventListener('click', async () => {
 })
 window.addEventListener('appinstalled', () => (install.hidden = true))
 
-const platform =
-  (navigator as { userAgentData?: { platform: string } }).userAgentData?.platform || navigator.platform || navigator.userAgent
 byId('mod-key').textContent = /mac|iphone|ipad|ipod/i.test(platform) ? '⌘' : 'Ctrl'
 
 window.addEventListener('dragover', (event) => {
