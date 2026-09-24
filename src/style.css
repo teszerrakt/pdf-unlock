@@ -924,123 +924,197 @@ kbd {
 dialog {
   width: 100%;
   max-width: 440px;
-  max-height: calc(100dvh - 48px);
+  max-height: calc(100dvh - 32px);
   margin: auto auto 0;
-  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  padding: 24px 20px max(20px, env(safe-area-inset-bottom));
   border: 0;
   border-radius: 28px 28px 0 0;
   background: var(--surface);
   color: var(--ink);
   box-shadow: 0 -16px 40px -24px rgba(60, 40, 15, 0.45);
   overflow-y: auto;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 dialog[open] {
+  display: flex;
   animation: sheet-up 0.42s var(--ease) both;
+}
+
+dialog.closing {
+  animation: sheet-down 0.28s cubic-bezier(0.4, 0, 1, 1) both;
 }
 
 dialog::backdrop {
   background: rgba(30, 26, 20, 0.35);
-  animation: out 0.25s ease reverse both;
+  animation: backdrop-in 0.3s ease both;
 }
 
-.about-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+dialog.closing::backdrop {
+  animation: backdrop-out 0.28s ease both;
 }
 
-.about-head h2 {
-  flex-grow: 1;
-  font-size: 30px;
+/* Contents rise in after the sheet, in reading order. */
+.about-in {
+  animation: rise 0.5s var(--ease) backwards;
 }
 
-.about-head .round svg {
+.about-cat {
+  width: 150px;
+  height: 104px;
+  flex-shrink: 0;
+  animation: cat-in 0.6s var(--ease) 0.08s backwards;
+}
+
+#about-title {
+  margin-top: 12px;
+  font-size: 34px;
+  animation-delay: 0.12s;
+}
+
+.about-lede {
+  max-width: 300px;
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: var(--muted);
+  animation-delay: 0.16s;
+}
+
+.about-x {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.about-x svg {
   width: 18px;
   height: 18px;
 }
 
 .how-steps {
   list-style: none;
-  margin: 20px 0 0;
+  width: 100%;
+  margin: 22px 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  font-size: 15px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  animation-delay: 0.2s;
 }
 
 .how-steps li {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
 }
 
 .how-steps span {
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--tint);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
   color: var(--accent);
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .facts {
   list-style: none;
-  margin: 20px 0 0;
-  padding: 4px 16px;
-  border-radius: 20px;
-  background: var(--raised);
-  border: 1px solid var(--hairline);
+  width: 100%;
+  margin: 22px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  text-align: left;
 }
 
 .facts li {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 12px 0;
-  font-size: 14px;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.35;
   color: var(--muted);
 }
 
-.facts li + li {
-  border-top: 1px solid var(--hairline);
+.facts li:nth-child(1) {
+  animation-delay: 0.24s;
+}
+.facts li:nth-child(2) {
+  animation-delay: 0.28s;
+}
+.facts li:nth-child(3) {
+  animation-delay: 0.32s;
+}
+.facts li:nth-child(4) {
+  animation-delay: 0.36s;
+}
+
+.facts svg {
+  color: var(--accent);
+  stroke-width: 1.7;
 }
 
 .facts strong {
   display: block;
-  font-size: 15px;
+  margin-bottom: 2px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--ink);
 }
 
-.facts .feature-icon {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border-radius: 11px;
-  background: var(--surface);
+#about-ok {
+  width: 100%;
+  height: 52px;
+  margin-top: 20px;
+  border-radius: 16px;
+  font-size: 16px;
+  animation-delay: 0.4s;
+}
+
+.about-copy {
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid var(--hairline);
   display: grid;
-  place-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  text-align: left;
+  animation-delay: 0.44s;
 }
 
-.facts svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 1.7;
-}
-
-.version {
-  margin: 16px 0 0;
-  text-align: center;
-  font-size: 12px;
+.about-copy dt {
+  font-size: 11px;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
+}
+
+.about-copy dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+#about-offline.ready::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 1px;
 }
 
 /* Desktop */
@@ -1311,15 +1385,39 @@ dialog::backdrop {
   }
 
   dialog {
+    width: 480px;
     margin: auto;
-    padding: 24px;
+    padding: 28px 28px 24px;
     border: 1px solid var(--hairline);
     border-radius: 28px;
     box-shadow: 0 24px 48px -24px rgba(60, 40, 15, 0.45);
   }
 
   dialog[open] {
-    animation: rise 0.34s var(--ease) both;
+    animation: card-in 0.4s var(--ease) both;
+  }
+
+  dialog.closing {
+    animation: card-out 0.22s ease both;
+  }
+
+  .about-cat {
+    width: 160px;
+    height: 110px;
+  }
+
+  #about-title {
+    font-size: 38px;
+  }
+
+  .about-lede {
+    max-width: 340px;
+  }
+
+  .facts li {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
   }
 }
 
@@ -1348,6 +1446,38 @@ dialog::backdrop {
 @keyframes sheet-up {
   from {
     transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes card-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes backdrop-out {
+  to {
+    opacity: 0;
   }
 }
 

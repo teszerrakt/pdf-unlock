@@ -267,10 +267,29 @@ download.addEventListener('click', () => toast('Download started'))
 
 for (const button of document.querySelectorAll('[data-reset]')) button.addEventListener('click', reset)
 
+// A dialog closes at once, so play the exit animation first.
+function closeAbout() {
+  if (reducedMotion.matches) return about.close()
+  about.classList.add('closing')
+  // Children and the backdrop fire animationend here too; wait for the dialog's own.
+  const done = (event: AnimationEvent) => {
+    if (event.target !== about || event.pseudoElement) return
+    about.removeEventListener('animationend', done)
+    about.classList.remove('closing')
+    about.close()
+  }
+  about.addEventListener('animationend', done)
+}
+
 byId('how').addEventListener('click', () => about.showModal())
-byId('about-close').addEventListener('click', () => about.close())
+byId('about-close').addEventListener('click', closeAbout)
+byId('about-ok').addEventListener('click', closeAbout)
 about.addEventListener('click', (event) => {
-  if (event.target === about) about.close()
+  if (event.target === about) closeAbout()
+})
+about.addEventListener('cancel', (event) => {
+  event.preventDefault()
+  closeAbout()
 })
 
 // Chromium only: the browser offers install, and the bar shows a button for it.
@@ -351,12 +370,17 @@ async function takeSharedFile() {
 
 takeSharedFile()
 
-const built = new Date(__BUILT_AT__).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-const offline = navigator.serviceWorker?.controller ? 'offline ready' : 'not offline yet'
+const builtAt = new Date(__BUILT_AT__)
+const offlineReady = !!navigator.serviceWorker?.controller
 // An installed app runs inside the browser that installed it, so this also names the installer.
 const installed = matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true
-const mode = installed ? 'installed app' : 'browser tab'
-byId('version').textContent = `v${__APP_VERSION__} · built ${built} · ${offline} · ${browserName()} · ${mode}`
+byId('about-version').textContent = __APP_VERSION__
+byId('about-built').textContent = builtAt.toLocaleDateString(undefined, { dateStyle: 'medium' })
+byId('about-built').title = builtAt.toLocaleString()
+byId('about-offline').textContent = offlineReady ? 'Ready' : 'Not yet'
+byId('about-offline').classList.toggle('ready', offlineReady)
+byId('about-browser').textContent = browserName()
+byId('about-mode').textContent = installed ? 'Installed app' : 'Browser tab'
 
 function browserName() {
   type Brand = { brand: string; version: string }
