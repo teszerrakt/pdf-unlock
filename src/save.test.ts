@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { doneText, saveChoice } from './save'
+import { doneText, saveAllChoice, saveChoice } from './save'
 
 describe('saveChoice', () => {
   it('offers only "Save or share" on iOS, where a download opens a viewer instead of saving', () => {
@@ -48,9 +48,45 @@ describe('doneText', () => {
     )
   })
 
+  it('names the date form the open password worked written as', () => {
+    expect(doneText('statement.pdf', true, 0, { password: '05081990', form: 'DDMMYYYY' })).toMatch(
+      /Your password worked written as 05081990 \(day-month-year\)\.$/,
+    )
+  })
+
+  it('names the date form after the saving from the repack', () => {
+    expect(doneText('statement.pdf', true, 2_200_000, { password: '900805', form: 'YYMMDD' })).toBe(
+      'This copy opens anywhere, no password needed. It’s also 2.2 MB smaller. Your password worked written as 900805 (year-month-day, short year).',
+    )
+  })
+
+  it('names no date form when the exact text worked', () => {
+    expect(doneText('statement.pdf', true, 0, { password: '05081990', form: null })).toBe(
+      'This copy opens anywhere, no password needed.',
+    )
+  })
+
   it('mentions a saving of exactly 50 KB and 5% of the input', () => {
     expect(doneText('statement.pdf', true, 50_000, { of: 1_000_000 })).toBe(
       'This copy opens anywhere, no password needed. It’s also 50 KB smaller.',
     )
+  })
+})
+
+describe('saveAllChoice', () => {
+  it('offers Save all on desktop, where sharing files does not work', () => {
+    expect(saveAllChoice(2, false, false)).toEqual({ share: false, download: true, shareLabel: 'Share all', primary: 'download' })
+  })
+
+  it('offers Share all first and Save all second on Android', () => {
+    expect(saveAllChoice(2, true, false)).toEqual({ share: true, download: true, shareLabel: 'Share all', primary: 'share' })
+  })
+
+  it('offers only Save or share all on iPhone', () => {
+    expect(saveAllChoice(2, true, true)).toEqual({ share: true, download: false, shareLabel: 'Save or share all', primary: 'share' })
+  })
+
+  it('offers neither when nothing was unlocked', () => {
+    expect(saveAllChoice(0, true, false)).toMatchObject({ share: false, download: false })
   })
 })
