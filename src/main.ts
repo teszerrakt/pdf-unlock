@@ -3,7 +3,10 @@ import '@fontsource/instrument-serif/400.css'
 import '@fontsource/instrument-serif/400-italic.css'
 import './style.css'
 import type { WorkerRequest, WorkerResponse } from './unlock.worker'
-import { SHARE_ACTION, SHARE_CACHE, SHARED_AT_HEADER, SHARED_FILE, SHARED_NAME_HEADER } from './share-target'
+import { SHARE_ACTION, SHARE_CACHE, SHARED_AT_HEADER, SHARED_FILE, SHARED_NAME_HEADER, isLeftover } from './share-target'
+import { formatSize, isPdf, unlockedName } from './file'
+import { browserName, isIos as detectIos, modifierKey, type Brand } from './platform'
+import { doneText, saveChoice } from './save'
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 
@@ -30,8 +33,7 @@ const install = byId<HTMLButtonElement>('install')
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
 const platform =
   (navigator as { userAgentData?: { platform: string } }).userAgentData?.platform || navigator.platform || navigator.userAgent
-// iPadOS reports a Mac platform; touch tells them apart.
-const isIos = /iphone|ipad|ipod/i.test(platform) || (/mac/i.test(platform) && navigator.maxTouchPoints > 1)
+const isIos = detectIos(platform, navigator.maxTouchPoints)
 
 // Work that ends within this many ms skips the Unlocking screen, so a quick answer does not flash it.
 const PATIENCE = 300
@@ -139,19 +141,19 @@ function openFile(file: File) {
 }
 
 function handle(response: WorkerResponse) {
-  if (response.type === 'decrypting') return setSteps(2)
+  if (response.type === 'restricted') return setSteps(2)
   clearTimeout(pending)
   submit.disabled = false
   switch (response.type) {
     case 'needs-password':
     case 'wrong-password':
       return askPassword(response.type === 'wrong-password')
-    case 'not-encrypted':
+    case 'not-locked':
       worker?.terminate()
       return stop('Nothing to unlock.', `${fileName} has no password. It already opens anywhere.`, true)
     case 'unlocked':
       return finish(response.pdf, response.hadPassword)
-    case 'error':
+    case 'unreadable':
       worker?.terminate()
       return fail(response.message)
   }
@@ -189,32 +191,24 @@ function finish(pdf: Uint8Array, hadPassword: boolean) {
   worker?.terminate()
   worker = null
   password.value = ''
-  const name = fileName.replace(/(\.pdf)?$/i, '-unlocked.pdf')
+  const name = unlockedName(fileName)
   unlocked = new File([pdf as BlobPart], name, { type: 'application/pdf' })
   downloadUrl = URL.createObjectURL(unlocked)
   download.href = downloadUrl
   download.download = name
-  const canShare = !!navigator.canShare?.({ files: [unlocked] })
-  // iOS opens a downloaded PDF in a viewer instead of saving it; its share sheet has Save to Files.
-  const shareOnly = canShare && isIos
-  share.hidden = !canShare
-  byId('share-label').textContent = shareOnly ? 'Save or share' : 'Share'
-  download.hidden = shareOnly
-  download.classList.toggle('primary', !canShare)
-  download.classList.toggle('secondary', canShare)
+  const choice = saveChoice(!!navigator.canShare?.({ files: [unlocked] }), isIos)
+  share.hidden = !choice.share
+  byId('share-label').textContent = choice.shareLabel
+  download.hidden = !choice.download
+  download.classList.toggle('primary', choice.primary === 'download')
+  download.classList.toggle('secondary', choice.primary === 'share')
   byId('done-name').textContent = name
   byId('done-info').textContent = `${formatSize(unlocked.size)} · No password`
-  byId('done-text').textContent = hadPassword
-    ? 'This copy opens anywhere, no password needed.'
-    : `${fileName} had no open password, only print or copy limits. This copy has none.`
+  byId('done-text').textContent = doneText(fileName, hadPassword)
   if (current !== 'busy') return show('done')
   // Let the last step tick before leaving the Unlocking screen.
   setSteps(4)
   pending = window.setTimeout(() => show('done'), reducedMotion.matches ? 0 : 500)
-}
-
-function formatSize(bytes: number) {
-  return bytes < 1e6 ? `${Math.max(1, Math.round(bytes / 1e3))} KB` : `${(bytes / 1e6).toFixed(1)} MB`
 }
 
 function setReveal(on: boolean) {
@@ -230,8 +224,6 @@ function toast(text: string) {
   clearTimeout(toastTimer)
   toastTimer = window.setTimeout(() => (toastBox.hidden = true), 1800)
 }
-
-const isPdf = (file: File) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
 
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0]
@@ -308,7 +300,7 @@ install.addEventListener('click', async () => {
 })
 window.addEventListener('appinstalled', () => (install.hidden = true))
 
-byId('mod-key').textContent = /mac|iphone|ipad|ipod/i.test(platform) ? '⌘' : 'Ctrl'
+byId('mod-key').textContent = modifierKey(platform)
 
 window.addEventListener('dragover', (event) => {
   event.preventDefault()
@@ -356,9 +348,8 @@ async function takeSharedFile() {
   const cache = await caches.open(SHARE_CACHE)
   const response = await cache.match(SHARED_FILE)
   if (!shared) {
-    // Another window may be mid-share, so only sweep a file left over from an interrupted one.
-    const age = Date.now() - Number(response?.headers.get(SHARED_AT_HEADER) ?? 0)
-    if (response && age > 60_000) await caches.delete(SHARE_CACHE)
+    // Sweep a file left over from an interrupted share.
+    if (response && isLeftover(response.headers.get(SHARED_AT_HEADER), Date.now())) await caches.delete(SHARE_CACHE)
     return
   }
   await caches.delete(SHARE_CACHE)
@@ -390,26 +381,6 @@ byId('about-built').textContent = builtAt.toLocaleDateString(undefined, { dateSt
 byId('about-built').title = builtAt.toLocaleString()
 byId('about-offline').textContent = offlineReady ? 'Ready' : 'Not yet'
 byId('about-offline').classList.toggle('ready', offlineReady)
-byId('about-browser').textContent = browserName()
+const brands = (navigator as { userAgentData?: { brands: Brand[] } }).userAgentData?.brands ?? []
+byId('about-browser').textContent = browserName(brands, navigator.userAgent)
 byId('about-mode').textContent = installed ? 'Installed app' : 'Browser tab'
-
-function browserName() {
-  type Brand = { brand: string; version: string }
-  const brands = (navigator as { userAgentData?: { brands: Brand[] } }).userAgentData?.brands ?? []
-  const brand = brands.find((b) => !/not.?a.?brand|chromium/i.test(b.brand)) ?? brands.find((b) => /chromium/i.test(b.brand))
-  if (brand) return `${brand.brand} ${brand.version}`
-  const ua = navigator.userAgent
-  const known: [RegExp, string][] = [
-    [/SamsungBrowser\/(\d+)/, 'Samsung Internet'],
-    [/EdgiOS\/(\d+)|Edg\/(\d+)/, 'Microsoft Edge'],
-    [/CriOS\/(\d+)/, 'Chrome'],
-    [/FxiOS\/(\d+)|Firefox\/(\d+)/, 'Firefox'],
-    [/Chrome\/(\d+)/, 'Chrome'],
-    [/Version\/(\d+[.\d]*).*Safari/, 'Safari'],
-  ]
-  for (const [pattern, name] of known) {
-    const match = ua.match(pattern)
-    if (match) return `${name} ${match.slice(1).find(Boolean)}`
-  }
-  return 'unknown browser'
-}
