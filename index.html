@@ -20,7 +20,7 @@
           <span class="mark" aria-hidden="true"><span class="art art-mark"></span></span>
           <span class="wordmark">Sphynx</span>
         </div>
-        <button id="back" type="button" class="round tap" aria-label="Back" data-reset hidden>
+        <button id="back" type="button" class="round tap" aria-label="Back" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
         </button>
         <div class="bar-end">
@@ -136,13 +136,13 @@
         <section id="busy" class="screen busy" hidden>
           <div class="cat busy-cat" aria-hidden="true"><span class="art cat-2 breathe"></span></div>
           <div class="busy-title rise d80" role="status">
-            <h1 class="display">Unlocking…</h1>
+            <h1 id="busy-heading" class="display"></h1>
             <p id="busy-name" class="sub"></p>
           </div>
           <ol id="steps" class="steps rise d140">
-            <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>Reading the file</li>
-            <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span><span>Removing the password<span id="trying" class="file-info step-note" hidden></span></span></li>
-            <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>Ready to save</li>
+            <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span><span class="step-label"></span></li>
+            <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span><span><span class="step-label"></span><span id="trying" class="file-info step-note" hidden></span></span></li>
+            <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span><span class="step-label"></span></li>
           </ol>
           <p class="assure rise d200">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z" /></svg>
@@ -153,18 +153,23 @@
         <section id="done" class="screen done" hidden>
           <div class="cat done-cat" aria-hidden="true"><span class="art cat-3 pop"></span></div>
           <div class="done-title">
-            <h1 class="display rise d140">Unlocked.</h1>
+            <h1 id="done-title" class="display rise d140">Unlocked.</h1>
             <p id="done-text" class="lede rise d190"></p>
           </div>
           <div class="file-card rise d240">
             <span class="file-icon" aria-hidden="true">
               PDF
-              <span class="file-badge open"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10.5" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7" /></svg></span>
+              <span id="done-badge-open" class="file-badge open"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10.5" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7" /></svg></span>
+              <span id="done-badge-locked" class="file-badge locked" hidden><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10.5" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></svg></span>
             </span>
             <span class="file-meta">
               <span id="done-name" class="file-name"></span>
               <span id="done-info" class="file-info"></span>
             </span>
+            <button id="add-password" type="button" class="card-action tap">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10.5" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></svg>
+              Add password
+            </button>
           </div>
           <div class="actions">
             <button id="share" type="button" class="button primary tap rise d300" hidden>
@@ -179,6 +184,48 @@
             <p class="note">Nothing was uploaded. This copy is cleared when you leave.</p>
           </div>
         </section>
+
+        <form id="relock" class="screen unlock" hidden>
+          <div class="cat unlock-cat" aria-hidden="true"><span class="art cat-1"></span></div>
+          <div class="file-card rise d60">
+            <span class="file-icon" aria-hidden="true">
+              PDF
+              <span class="file-badge open"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10.5" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7" /></svg></span>
+            </span>
+            <span class="file-meta">
+              <span id="relock-name" class="file-name"></span>
+              <span id="relock-info" class="file-info"></span>
+            </span>
+          </div>
+          <h1 class="display rise d110">Set a new password.</h1>
+          <p class="sub rise d140">This copy will open only with it.</p>
+          <div class="password rise d170">
+            <label for="new-password">New password</label>
+            <div id="new-field" class="field">
+              <input id="new-password" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-describedby="too-long new-password-hint" aria-invalid="false" required />
+              <button id="new-reveal" type="button" class="reveal tap" aria-label="Hide password" aria-pressed="true">
+                <svg class="eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+                <svg class="eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
+              </button>
+            </div>
+            <p id="too-long" class="error" role="alert" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.3h.01" /></svg>
+              Too long. Use a shorter password.
+            </p>
+            <p id="new-password-hint" class="hint">Sphynx can’t recover it. Keep it somewhere safe.</p>
+          </div>
+          <div class="actions">
+            <p class="assure">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z" /></svg>
+              Set on this device. Never sent anywhere.
+            </p>
+            <button id="lock-submit" type="submit" class="button primary tap" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10.5" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></svg>
+              Lock it
+            </button>
+            <button id="relock-cancel" type="button" class="link muted tap">Cancel</button>
+          </div>
+        </form>
 
         <section id="stop" class="screen stop" hidden>
           <div class="stop-body">

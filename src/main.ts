@@ -2,9 +2,10 @@ import '@fontsource-variable/geist/wght.css'
 import '@fontsource/instrument-serif/400.css'
 import '@fontsource/instrument-serif/400-italic.css'
 import './style.css'
+import { isOwnPasswordTooLong } from './unlock'
 import type { WorkerRequest, WorkerResponse } from './unlock.worker'
 import { SHARE_ACTION, SHARE_CACHE, SHARED_AT_HEADER, SHARED_FILE, SHARED_NAME_HEADER, isLeftover } from './share-target'
-import { formatSize, isPdf, unlockedName } from './file'
+import { formatSize, isPdf, lockedName, unlockedName } from './file'
 import { browserName, isIos as detectIos, modifierKey, type Brand } from './platform'
 import { dateForms, tryingText, wrongText } from './dates'
 import { doneText, saveChoice } from './save'
@@ -12,10 +13,10 @@ import { createPacer } from './pace'
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 
-const views = ['pick', 'busy', 'unlock', 'done', 'stop'] as const
+const views = ['pick', 'busy', 'unlock', 'done', 'stop', 'relock'] as const
 type View = (typeof views)[number]
 // A deeper view slides in from the right, a shallower one from the left.
-const depth: Record<View, number> = { pick: 0, unlock: 1, busy: 2, done: 3, stop: 3 }
+const depth: Record<View, number> = { pick: 0, unlock: 1, busy: 2, done: 3, stop: 3, relock: 4 }
 
 const fileInput = byId<HTMLInputElement>('file')
 const drop = byId('drop')
@@ -28,6 +29,11 @@ const submit = byId<HTMLButtonElement>('submit')
 const unlockCat = byId('unlock-cat')
 const download = byId<HTMLAnchorElement>('download')
 const share = byId<HTMLButtonElement>('share')
+const addPassword = byId<HTMLButtonElement>('add-password')
+const relockForm = byId<HTMLFormElement>('relock')
+const ownPassword = byId<HTMLInputElement>('new-password')
+const ownReveal = byId<HTMLButtonElement>('new-reveal')
+const lockSubmit = byId<HTMLButtonElement>('lock-submit')
 const steps = [...byId('steps').children]
 const toastBox = byId('toast')
 const about = byId<HTMLDialogElement>('about')
@@ -51,6 +57,7 @@ let worker: Worker | null = null
 let fileName = ''
 let fileSize = 0
 let unlocked: File | null = null
+let offered: File | null = null
 let downloadUrl: string | null = null
 let current: View = 'pick'
 let step = 1
@@ -60,15 +67,18 @@ let toastTimer = 0
 let pace = createPacer(0)
 let tries = createPacer(0)
 let datesTried = 0
+// Locking runs after Done, so its busy and Locked screens slide in forward.
+let locking = false
 
 function show(view: View, then?: () => void) {
   if (view === current) return then?.()
-  document.documentElement.dataset.dir = depth[view] < depth[current] ? 'back' : 'fwd'
+  document.documentElement.dataset.dir = depth[view] < depth[current] && !locking ? 'back' : 'fwd'
   current = view
   const swap = () => {
+    const hasBack = view === 'unlock' || view === 'relock'
     for (const v of views) byId(v).hidden = v !== view
-    byId('brand').hidden = view === 'unlock'
-    byId('back').hidden = view !== 'unlock'
+    byId('brand').hidden = hasBack
+    byId('back').hidden = !hasBack
     then?.()
   }
   if (!document.startViewTransition || reducedMotion.matches) return swap()
@@ -95,8 +105,19 @@ function setSteps(n: number) {
   })
 }
 
+const busyText = {
+  unlock: ['Unlocking…', 'Reading the file', 'Removing the password', 'Ready to save'],
+  lock: ['Locking…', 'Reading the copy', 'Adding your password', 'Ready to save'],
+}
+
+function setBusy(kind: keyof typeof busyText, name: string) {
+  const [title, ...labels] = busyText[kind]
+  byId('busy-heading').textContent = title
+  steps.forEach((li, i) => (li.querySelector('.step-label')!.textContent = labels[i]))
+  byId('busy-name').textContent = name
+}
+
 function showBusy() {
-  byId('busy-name').textContent = fileName
   setSteps(step)
   show('busy')
   // Appearing is the screen's first tick, so the next update waits a step floor after it.
@@ -127,11 +148,14 @@ function clear() {
   if (downloadUrl) URL.revokeObjectURL(downloadUrl)
   downloadUrl = null
   unlocked = null
+  offered = null
+  locking = false
   password.value = ''
   fileInput.value = ''
   submit.disabled = false
   setReveal(false)
   setWrong(false)
+  clearOwnPassword()
 }
 
 function reset() {
@@ -144,17 +168,22 @@ function send(request: WorkerRequest) {
   worker?.postMessage(request)
 }
 
+function startWorker(answer: (attempt: Worker, response: WorkerResponse) => void) {
+  const started = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
+  started.onmessage = (event: MessageEvent<WorkerResponse>) => answer(started, event.data)
+  started.onerror = () => fail('Unlocking failed. Reload the page and try again.')
+  worker = started
+}
+
 function openFile(file: File) {
   clear()
   fileName = file.name || 'document.pdf'
   fileSize = file.size
   step = 1
+  setBusy('unlock', fileName)
   pace = createPacer(reducedMotion.matches ? 0 : STEP_FLOOR)
   tries = createPacer(reducedMotion.matches ? 0 : TRY_FLOOR)
-  const attempt = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
-  worker = attempt
-  worker.onmessage = (event: MessageEvent<WorkerResponse>) => receive(attempt, event.data)
-  worker.onerror = () => fail('Unlocking failed. Reload the page and try again.')
+  startWorker(receive)
   wait()
   send({ type: 'open', file })
 }
@@ -186,6 +215,8 @@ function handle(response: WorkerResponse) {
       return stop('Nothing to unlock.', `${fileName} has no password. It already opens anywhere.`, true)
     case 'unlocked':
       return finish(response)
+    case 'locked':
+      return finishLock(response.pdf)
     case 'unreadable':
       worker?.terminate()
       return fail(response.message)
@@ -227,15 +258,8 @@ function finish({ pdf, hadPassword, password: worked, form }: Extract<WorkerResp
   password.value = ''
   const name = unlockedName(fileName)
   unlocked = new File([pdf as BlobPart], name, { type: 'application/pdf' })
-  downloadUrl = URL.createObjectURL(unlocked)
-  download.href = downloadUrl
-  download.download = name
-  const choice = saveChoice(!!navigator.canShare?.({ files: [unlocked] }), isIos)
-  share.hidden = !choice.share
-  byId('share-label').textContent = choice.shareLabel
-  download.hidden = !choice.download
-  download.classList.toggle('primary', choice.primary === 'download')
-  download.classList.toggle('secondary', choice.primary === 'share')
+  offer(unlocked)
+  setDoneLocked(false)
   byId('done-name').textContent = name
   byId('done-info').textContent = `${formatSize(unlocked.size)} · No password`
   byId('done-text').textContent = doneText(fileName, hadPassword, fileSize - unlocked.size, { of: fileSize, password: worked, form })
@@ -245,10 +269,76 @@ function finish({ pdf, hadPassword, password: worked, form }: Extract<WorkerResp
   pending = window.setTimeout(() => show('done'), reducedMotion.matches ? 0 : 500)
 }
 
-function setReveal(on: boolean) {
-  password.type = on ? 'text' : 'password'
-  reveal.setAttribute('aria-label', on ? 'Hide password' : 'Show password')
-  reveal.setAttribute('aria-pressed', String(on))
+function offer(file: File) {
+  offered = file
+  if (downloadUrl) URL.revokeObjectURL(downloadUrl)
+  downloadUrl = URL.createObjectURL(file)
+  download.href = downloadUrl
+  download.download = file.name
+  const choice = saveChoice(!!navigator.canShare?.({ files: [file] }), isIos)
+  share.hidden = !choice.share
+  byId('share-label').textContent = choice.shareLabel
+  download.hidden = !choice.download
+  download.classList.toggle('primary', choice.primary === 'download')
+  download.classList.toggle('secondary', choice.primary === 'share')
+}
+
+function setDoneLocked(on: boolean) {
+  byId('done-title').textContent = on ? 'Locked.' : 'Unlocked.'
+  byId('done-badge-open').hidden = on
+  byId('done-badge-locked').hidden = !on
+  addPassword.hidden = on
+}
+
+function askOwnPassword() {
+  byId('relock-name').textContent = unlocked!.name
+  byId('relock-info').textContent = `${formatSize(unlocked!.size)} · No password`
+  show('relock', () => ownPassword.focus())
+}
+
+// Unlike the open password, the own password shows as it is typed until the eye toggle hides it.
+function clearOwnPassword() {
+  ownPassword.value = ''
+  checkOwnPassword()
+  setReveal(true, ownPassword, ownReveal)
+}
+
+function checkOwnPassword() {
+  const tooLong = isOwnPasswordTooLong(ownPassword.value)
+  byId('too-long').hidden = !tooLong
+  byId('new-field').classList.toggle('wrong', tooLong)
+  ownPassword.setAttribute('aria-invalid', String(tooLong))
+  lockSubmit.disabled = locking || !ownPassword.value || tooLong
+}
+
+// Also stops a lock that started but has not reached the busy screen yet.
+function leaveRelock() {
+  clearTimeout(pending)
+  worker?.terminate()
+  worker = null
+  locking = false
+  clearOwnPassword()
+  show('done')
+}
+
+function finishLock(pdf: Uint8Array) {
+  worker?.terminate()
+  worker = null
+  const name = lockedName(unlocked!.name)
+  offer(new File([pdf as BlobPart], name, { type: 'application/pdf' }))
+  setDoneLocked(true)
+  byId('done-text').textContent = 'Opens only with the password you set. Printing and copying stay allowed.'
+  byId('done-name').textContent = name
+  byId('done-info').textContent = `${formatSize(pdf.length)} · Your password`
+  if (current !== 'busy') return show('done')
+  setSteps(4)
+  pending = window.setTimeout(() => show('done'), reducedMotion.matches ? 0 : 500)
+}
+
+function setReveal(on: boolean, input = password, button = reveal) {
+  input.type = on ? 'text' : 'password'
+  button.setAttribute('aria-label', on ? 'Hide password' : 'Show password')
+  button.setAttribute('aria-pressed', String(on))
 }
 
 function toast(text: string) {
@@ -282,10 +372,30 @@ password.addEventListener('input', () => {
 
 reveal.addEventListener('click', () => setReveal(password.type === 'password'))
 
+addPassword.addEventListener('click', askOwnPassword)
+
+relockForm.addEventListener('submit', (event) => {
+  event.preventDefault()
+  lockSubmit.disabled = true
+  locking = true
+  step = 2
+  setBusy('lock', unlocked!.name)
+  // Its one answer is not paced: pacing covers the Unlocking screen only.
+  startWorker((_, response) => handle(response))
+  wait()
+  send({ type: 'lock', file: unlocked!, password: ownPassword.value })
+  ownPassword.value = ''
+})
+
+ownPassword.addEventListener('input', checkOwnPassword)
+ownReveal.addEventListener('click', () => setReveal(ownPassword.type === 'password', ownPassword, ownReveal))
+byId('relock-cancel').addEventListener('click', leaveRelock)
+byId('back').addEventListener('click', () => (current === 'relock' ? leaveRelock() : reset()))
+
 share.addEventListener('click', async () => {
-  if (!unlocked) return
+  if (!offered) return
   try {
-    await navigator.share({ files: [unlocked] })
+    await navigator.share({ files: [offered] })
     toast('Done')
   } catch {
     // Closing the share sheet rejects; nothing to do.
@@ -350,12 +460,14 @@ window.addEventListener('drop', (event) => {
   drop.classList.remove('over')
   const file = event.dataTransfer?.files[0]
   if (!file) return
-  if (isPdf(file)) openFile(file)
-  else stop('That’s not a PDF.', `${file.name} is not a PDF. Choose a PDF file.`)
+  if (isPdf(file)) return openFile(file)
+  // A drop abandons the attempt in progress, so its worker cannot answer over this screen.
+  clear()
+  stop('That’s not a PDF.', `${file.name} is not a PDF. Choose a PDF file.`)
 })
 
 document.addEventListener('paste', (event) => {
-  if (event.target === password) return
+  if (event.target === password || event.target === ownPassword) return
   const file = [...(event.clipboardData?.files ?? [])].find(isPdf)
   if (!file) return
   event.preventDefault()

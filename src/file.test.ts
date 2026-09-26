@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatSize, isPdf, unlockedName } from './file'
+import { formatSize, isPdf, lockedName, unlockedName } from './file'
 
 describe('isPdf', () => {
   it.each([
@@ -29,6 +29,15 @@ describe('unlockedName', () => {
     ['e-statement 2026.pdf', 'e-statement 2026-unlocked.pdf'],
   ])('names the unlocked copy of %j %j', (name, expected) => {
     expect(unlockedName(name)).toBe(expected)
+  })
+})
+
+describe('lockedName', () => {
+  it.each([
+    ['statement-unlocked.pdf', 'statement-locked.pdf'],
+    ['x-unlocked-unlocked.pdf', 'x-unlocked-locked.pdf'],
+  ])('names the locked copy of %j %j', (name, expected) => {
+    expect(lockedName(name)).toBe(expected)
   })
 })
 

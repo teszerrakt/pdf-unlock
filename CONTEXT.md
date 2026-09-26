@@ -22,6 +22,10 @@ _Avoid_: Encrypted PDF, protected PDF
 A locked PDF with restrictions but no open password.
 _Avoid_: Owner-only PDF
 
+**Own password**:
+A password the user sets on an unlocked copy. It is both the copy's open password and its owner password.
+_Avoid_: New password, re-encrypt, protect
+
 ### Attempts
 
 **Attempt**:
@@ -65,3 +69,7 @@ _Avoid_: Not encrypted, unprotected
 **Unreadable**:
 The outcome for a file that cannot be parsed as a PDF, or that the device cannot process.
 _Avoid_: Error, corrupt, failed
+
+**Locked copy**:
+The PDF Sphynx produces from an unlocked copy and an own password: same content, no restrictions.
+_Avoid_: Encrypted output, protected copy
