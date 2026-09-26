@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, realWorld, restrictedPdf } from '../test/fixtures'
+import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, pngImagePdf, realWorld, restrictedPdf } from '../test/fixtures'
 import { createQpdf, isLocked, qpdf } from '../test/qpdf'
 import { open, unlock, type CreateQpdf, type Outcome, type Prompt } from './unlock'
 
@@ -96,6 +96,23 @@ describe('repacking the unlocked copy', () => {
     // qpdf compresses uncompressed streams on any rewrite, so the repack has to beat that too.
     const plain = await qpdf(pdf, ['--password=secret', '--decrypt', '/in.pdf', '/out.pdf'])
     expect(copy.length).toBeLessThan(plain.output!.length)
+  })
+
+  it('never makes the unlocked copy bigger than a plain decrypt, even for a PNG-filtered image', async () => {
+    const pdf = await pngImagePdf({ openPassword: 'secret' })
+    const copy = await expectUnlockedCopy(await tryPassword(pdf, 'secret'), true)
+    const plain = await qpdf(pdf, ['--password=secret', '--decrypt', '/in.pdf', '/out.pdf'])
+    expect(copy.length).toBeLessThanOrEqual(plain.output!.length)
+  })
+
+  it('keeps the repacked copy when the plain decrypt after it runs out of memory', async () => {
+    let runs = 0
+    const outOfMemoryAfterOne: CreateQpdf = async () => {
+      if (++runs > 1) throw new RangeError('WebAssembly.Memory(): could not allocate memory')
+      return createQpdf()
+    }
+    await expectUnlockedCopy(await unlock(outOfMemoryAfterOne, await pngImagePdf({ openPassword: 'secret' }), 'secret'), true)
+    expect(runs).toBe(2)
   })
 
   it('still unlocks, with a plain decrypt, when the repack run fails', async () => {

@@ -64,6 +64,13 @@ export async function unlock(create: CreateQpdf, input: Uint8Array, password: st
   let { errors, output } = await decrypt(repack)
   // A file the repack run fails on gets the plain decrypt; a wrong password would fail that too.
   if (!output && !isPasswordError(errors)) ({ errors, output } = await decrypt())
+  // --recompress-flate drops PNG predictors, which can grow an image several times over. A copy
+  // no smaller than the input gets the plain decrypt too, and the smaller of the two wins. That run
+  // failing, even running out of memory, still leaves the repacked copy.
+  else if (output && output.length >= input.length) {
+    const plain = await decrypt().then(({ output }) => output, () => undefined)
+    if (plain && plain.length < output.length) output = plain
+  }
   if (output) return { type: 'unlocked', pdf: output, hadPassword: password !== null }
   if (isPasswordError(errors)) return { type: password === null ? 'needs-password' : 'wrong-password' }
   return unreadable(errors)
