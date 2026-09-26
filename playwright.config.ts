@@ -15,6 +15,8 @@ export default defineConfig({
     // Motion off by default so screens swap at once; e2e/motion.spec.ts turns it back on.
     reducedMotion: 'reduce',
     trace: 'retain-on-failure',
+    // To watch a run: SLOW_MO=800 npx playwright test --headed --workers=1
+    launchOptions: { slowMo: Number(process.env.SLOW_MO ?? 0) },
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
