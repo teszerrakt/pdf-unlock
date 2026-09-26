@@ -61,7 +61,8 @@ const repack = ['--object-streams=generate', '--recompress-flate', '--compressio
 export async function unlock(create: CreateQpdf, input: Uint8Array, password: string | null): Promise<Outcome | Prompt> {
   const args = password === null ? [] : [`--password=${password}`]
   const decrypt = (extra: string[] = []) => run(create, input, [...args, '--decrypt', ...extra, '/in.pdf', '/out.pdf'])
-  let { errors, output } = await decrypt(repack)
+  // A repack run that throws (a wasm abort, such as running out of memory) counts as failed.
+  let { errors, output } = await decrypt(repack).catch(() => ({ errors: '', output: undefined }))
   // A file the repack run fails on gets the plain decrypt; a wrong password would fail that too.
   if (!output && !isPasswordError(errors)) ({ errors, output } = await decrypt())
   // --recompress-flate drops PNG predictors, which can grow an image several times over. A copy

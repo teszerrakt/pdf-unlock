@@ -115,6 +115,19 @@ describe('repacking the unlocked copy', () => {
     expect(runs).toBe(2)
   })
 
+  it('still unlocks, with a plain decrypt, when the repack run aborts out of memory', async () => {
+    const abortingRepack: CreateQpdf = async () => {
+      const q = await createQpdf()
+      const callMain = q.callMain.bind(q)
+      q.callMain = (args) => {
+        if (args.includes('--object-streams=generate')) throw new WebAssembly.RuntimeError('Aborted(OOM)')
+        return callMain(args)
+      }
+      return q
+    }
+    await expectUnlockedCopy(await unlock(abortingRepack, await lockedPdf({ openPassword: 'secret' }), 'secret'), true)
+  })
+
   it('still unlocks, with a plain decrypt, when the repack run fails', async () => {
     const calls: string[][] = []
     const failingRepack: CreateQpdf = async () => {
