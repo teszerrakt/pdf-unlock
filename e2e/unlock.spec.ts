@@ -1,5 +1,6 @@
 import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf } from '../test/fixtures.ts'
-import { downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test } from './test.ts'
+import { isLocked, qpdf } from '../test/qpdf.ts'
+import { downloadCopy, downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test } from './test.ts'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -111,4 +112,109 @@ test.describe('abandoning an attempt', () => {
       await expect(page.locator('#file')).toHaveValue('')
     })
   }
+})
+
+test.describe('own password', () => {
+  test.beforeEach(async ({ page }) => {
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+    await enterPassword(page, 'secret')
+    await expect(screen(page, 'done')).toBeVisible()
+    await page.getByRole('button', { name: 'Add password', exact: true }).click()
+  })
+
+  const ownPassword = (page: import('@playwright/test').Page) => page.getByLabel('New password', { exact: true })
+
+  test('Add password on the unlocked copy opens the set screen, Lock it waits for a password', async ({ page }) => {
+    await expect(screen(page, 'relock')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Set a new password.' })).toBeVisible()
+    await expect(ownPassword(page)).toHaveAttribute('type', 'text')
+    const lockIt = page.getByRole('button', { name: 'Lock it', exact: true })
+    await expect(lockIt).toBeDisabled()
+    await ownPassword(page).fill('h')
+    await expect(lockIt).toBeEnabled()
+  })
+
+  test('Lock it gives a locked copy that opens with the own password', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+
+    await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
+    await expect(page.locator('#done-text')).toHaveText('Opens only with the password you set. Printing and copying stay allowed.')
+    await expect(page.locator('#done-name')).toHaveText('statement-locked.pdf')
+    await expect(page.locator('#done-info')).toHaveText(/^\d+ KB · Your password$/)
+    await expect(page.locator('#done-badge-locked')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add password', exact: true })).toBeHidden()
+    const copy = await downloadCopy(page)
+    expect(copy.name).toBe('statement-locked.pdf')
+    expect(await isLocked(copy.pdf), 'the locked copy has no lock').toBe(true)
+    expect((await qpdf(copy.pdf, ['--password=hunter2', '--check', '/in.pdf'])).code).toBe(0)
+  })
+
+  for (const control of ['Cancel', 'Back']) {
+    test(`${control} on the set screen returns to the unlocked copy and empties the field`, async ({ page }) => {
+      await ownPassword(page).fill('half-typed')
+      await page.getByRole('button', { name: control, exact: true }).click()
+
+      await expect(page.getByRole('heading', { name: 'Unlocked.' })).toBeVisible()
+      expect((await downloadUnlockedCopy(page)).name).toBe('statement-unlocked.pdf')
+      await page.getByRole('button', { name: 'Add password', exact: true }).click()
+      await expect(ownPassword(page)).toHaveValue('')
+    })
+  }
+
+  test('Cancel straight after Lock it stops the lock and keeps the unlocked copy', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    // In one task, so Cancel lands before the busy screen's 300 ms wait or the worker's answer.
+    await page.evaluate(() => {
+      document.getElementById('lock-submit')!.click()
+      document.getElementById('relock-cancel')!.click()
+    })
+    await page.waitForTimeout(1000)
+    await expect(page.getByRole('heading', { name: 'Unlocked.' })).toBeVisible()
+    await expect(screen(page, 'busy')).toBeHidden()
+    expect((await downloadUnlockedCopy(page)).name).toBe('statement-unlocked.pdf')
+  })
+
+  test('typing again while a lock runs does not start a second one', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    const disabled = await page.evaluate(() => {
+      const field = document.getElementById('new-password') as HTMLInputElement
+      document.getElementById('lock-submit')!.click()
+      field.value = 'other'
+      field.dispatchEvent(new Event('input'))
+      return (document.getElementById('lock-submit') as HTMLButtonElement).disabled
+    })
+    expect(disabled).toBe(true)
+  })
+
+  test('dropping a file that is not a PDF while a lock runs stops the lock', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    // In one task, so the drop lands before the busy screen's 300 ms wait or the worker's answer.
+    await page.evaluate(() => {
+      document.getElementById('lock-submit')!.click()
+      const dataTransfer = new DataTransfer()
+      dataTransfer.items.add(new File(['notes'], 'notes.txt', { type: 'text/plain' }))
+      document.getElementById('drop')!.dispatchEvent(new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }))
+    })
+    await page.waitForTimeout(1000)
+    await expect(page.locator('#stop-title')).toHaveText('That’s not a PDF.')
+    await expect(screen(page, 'stop')).toBeVisible()
+  })
+
+  test('an own password over 127 UTF-8 bytes keeps Lock it disabled and says it is too long', async ({ page }) => {
+    const lockIt = page.getByRole('button', { name: 'Lock it', exact: true })
+    const tooLong = page.getByText('Too long. Use a shorter password.', { exact: true })
+    await ownPassword(page).fill('é'.repeat(64))
+    await expect(tooLong).toBeVisible()
+    await expect(lockIt).toBeDisabled()
+    await ownPassword(page).fill('x'.repeat(127))
+    await expect(tooLong).toBeHidden()
+    await expect(lockIt).toBeEnabled()
+  })
+
+  test('the eye toggle hides the own password', async ({ page }) => {
+    await page.getByRole('button', { name: 'Hide password', exact: true }).click()
+    await expect(ownPassword(page)).toHaveAttribute('type', 'password')
+    await expect(page.locator('#new-reveal')).toHaveAttribute('aria-label', 'Show password')
+  })
 })

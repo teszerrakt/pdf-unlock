@@ -1,11 +1,14 @@
 import createModule from '@neslinesli93/qpdf-wasm'
 import wasmUrl from '@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url'
-import { open, unlock, type CreateQpdf, type Outcome, type Prompt, type Qpdf } from './unlock'
+import { lock, open, unlock, type CreateQpdf, type Outcome, type Prompt, type Qpdf } from './unlock'
 
-export type WorkerRequest = { type: 'open'; file: File } | { type: 'unlock'; password: string }
+export type WorkerRequest =
+  | { type: 'open'; file: File }
+  | { type: 'unlock'; password: string }
+  | { type: 'lock'; file: File; password: string }
 
 // `restricted`: the file opens without a password; its restrictions are being removed.
-export type WorkerResponse = Outcome | Prompt | { type: 'restricted' }
+export type WorkerResponse = Outcome | Prompt | { type: 'restricted' } | { type: 'locked'; pdf: Uint8Array }
 
 const create: CreateQpdf = async () => (await createModule({ locateFile: () => wasmUrl })) as unknown as Qpdf
 
@@ -16,6 +19,9 @@ async function respond(request: WorkerRequest): Promise<WorkerResponse> {
   if (request.type === 'open') {
     input = new Uint8Array(await request.file.arrayBuffer())
     return open(create, input, () => self.postMessage({ type: 'restricted' } satisfies WorkerResponse))
+  }
+  if (request.type === 'lock') {
+    return { type: 'locked', pdf: await lock(create, new Uint8Array(await request.file.arrayBuffer()), request.password) }
   }
   return unlock(create, input!, request.password)
 }
@@ -28,6 +34,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     response = { type: 'unreadable', message: 'Unlocking failed. The file may be too large for this device.' }
   }
   if (response.type === 'unlocked') input = null
-  const transfer = response.type === 'unlocked' ? [response.pdf.buffer as ArrayBuffer] : []
+  const transfer = 'pdf' in response ? [response.pdf.buffer as ArrayBuffer] : []
   self.postMessage(response, { transfer })
 }

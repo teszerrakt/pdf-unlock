@@ -77,6 +77,21 @@ export async function unlock(create: CreateQpdf, input: Uint8Array, password: st
   return unreadable(errors)
 }
 
+// AES-256 takes at most 127 UTF-8 bytes of password; qpdf writes a longer one into a copy that
+// nothing opens, not even with that password.
+export const isOwnPasswordTooLong = (password: string) => new TextEncoder().encode(password).length > 127
+
+// The named flags keep an own password that starts with "--" from reading as a flag.
+export async function lock(create: CreateQpdf, input: Uint8Array, password: string): Promise<Uint8Array> {
+  // An empty open password would give a copy that opens without one.
+  if (!password) throw new Error('An own password cannot be empty')
+  if (isOwnPasswordTooLong(password)) throw new Error('An own password cannot be over 127 UTF-8 bytes')
+  const args = ['--encrypt', `--user-password=${password}`, `--owner-password=${password}`, '--bits=256', '--']
+  const { errors, output } = await run(create, input, [...args, '/in.pdf', '/out.pdf'])
+  if (!output) throw new Error(errors || 'qpdf could not lock the copy')
+  return output
+}
+
 // qpdf prefixes messages with "<program>: /in.pdf: ".
 function unreadable(errors: string): Outcome {
   const detail = errors.split('\n')[0]?.replace(/^.*?\/in\.pdf:\s*/, '').trim()
