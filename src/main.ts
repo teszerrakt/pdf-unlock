@@ -139,19 +139,19 @@ function openFile(file: File) {
 }
 
 function handle(response: WorkerResponse) {
-  if (response.type === 'decrypting') return setSteps(2)
+  if (response.type === 'restricted') return setSteps(2)
   clearTimeout(pending)
   submit.disabled = false
   switch (response.type) {
     case 'needs-password':
     case 'wrong-password':
       return askPassword(response.type === 'wrong-password')
-    case 'not-encrypted':
+    case 'not-locked':
       worker?.terminate()
       return stop('Nothing to unlock.', `${fileName} has no password. It already opens anywhere.`, true)
     case 'unlocked':
       return finish(response.pdf, response.hadPassword)
-    case 'error':
+    case 'unreadable':
       worker?.terminate()
       return fail(response.message)
   }
