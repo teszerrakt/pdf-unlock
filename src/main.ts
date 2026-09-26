@@ -61,7 +61,8 @@ function show(view: View, then?: () => void) {
   }
   if (!document.startViewTransition || reducedMotion.matches) return swap()
   document.documentElement.classList.add('vt')
-  document.startViewTransition(swap)
+  // A newer transition skips this one; the swap still runs, but WebKit rejects `ready` with an AbortError.
+  document.startViewTransition(swap).ready.catch(() => {})
 }
 
 // Re-adding a class does not restart its animation, so restart them by hand.
