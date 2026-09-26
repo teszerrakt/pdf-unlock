@@ -105,7 +105,7 @@ function toTries(harness: ReturnType<typeof setup>) {
 const counts = (harness: ReturnType<typeof setup>) =>
   harness.called('trying').flatMap(({ at, args: [count] }) => (count ? [[(count as { n: number }).n, at] as const] : []))
 
-test('20 date-form candidates and a worker that answers after the 3rd: the counter adds at most 1 s of wait, and Done shows within 1 s of the answer', () => {
+test('20 date-form candidates and a worker that answers after the 3rd: both counts show, and Done shows within 1 s of the answer', () => {
   const harness = setup()
   toTries(harness)
   const start = harness.now()
@@ -133,6 +133,19 @@ test('20 date-form candidates tried in quick succession: the counter reaches 20 
   expect(shown.at(-1)![1] - (start + 200)).toBeLessThanOrEqual(1000)
   for (const gap of gaps(shown.slice(0, 7))) expect(gap).toBeGreaterThanOrEqual(150)
   expect(harness.called('ask').at(-1)!.args[0]).toMatchObject({ wrong: true, tried: 7 })
+})
+
+// The cap bounds the counter; AC-1's step floor and last-tick hold still come after it.
+test('20 date-form candidates tried in quick succession, then the answer: Done shows within the 1 s cap, a step floor and the hold of the answer', () => {
+  const harness = setup()
+  toTries(harness)
+  const start = harness.now()
+  for (let n = 2; n <= 20; n++) harness.answer({ type: 'trying', n, of: 20 }, 10 * n)
+  harness.answer({ ...unlocked, password: '050890', form: 'DDMMYY' }, 210)
+  vi.runAllTimers()
+
+  expect(counts(harness).map(([n]) => n)).toEqual([...Array(19).keys()].map((i) => i + 2))
+  expect(doneAt(harness.shown())! - (start + 210)).toBeLessThanOrEqual(1000 + 350 + 500)
 })
 
 // What the page was told after `from` ms: nothing, for an abandoned attempt's answer.
@@ -234,4 +247,23 @@ test('in a batch, a wrong password’s answer makes the password prompt ready ag
 
   expect(called('ready').filter(({ at }) => at > submitted).map(({ at }) => at)).toEqual([submitted + 10])
   expect(called('ask').at(-1)!.at).toBeGreaterThan(submitted + 10)
+})
+
+test('an attempt abandoned by picking another file while its counts wait their turn: none of them reach the next file’s Unlocking screen', () => {
+  const harness = setup()
+  const { attempt, answer, now, called } = harness
+  toTries(harness)
+  // Every count and the answer arrive within 20 ms, so all but the first wait in the capped lane.
+  for (let n = 2; n <= 20; n++) answer({ type: 'trying', n, of: 20 }, n - 1)
+  answer({ ...unlocked, password: '050890', form: 'DDMMYY' }, 20)
+  vi.advanceTimersByTime(30)
+  attempt.open([pdf('april.pdf')])
+  vi.advanceTimersByTime(300)
+  expect(attempt.view).toBe('busy')
+  expect(called('busy').at(-1)!.args).toEqual(['unlock', 'april.pdf'])
+  const shown = now()
+  vi.runAllTimers()
+
+  expect(since(harness, shown)).toEqual([])
+  expect(called('unlocked')).toEqual([])
 })
