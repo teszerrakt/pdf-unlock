@@ -17,19 +17,16 @@ declare global {
 
 // Qpdf answers these fixtures in tens of ms, well inside the patience, so the Unlocking screen would
 // never show. Once `holdWorker()` is called, the worker's answers wait until it does, then reach the
-// page `gap` ms apart: a device slow enough to show the screen, with the pacing left to the page.
+// page in order, `gap` ms apart: a device slow enough to show the screen, the pacing left to the page.
 async function slowWorker(page: Page, gap: number) {
   await page.addInitScript((gap) => {
-    const held: (() => void)[] = []
-    let holding = false
-    window.holdWorker = () => (holding = true)
+    let shown = Promise.resolve()
+    let show = () => {}
+    let delivered = Promise.resolve()
+    window.holdWorker = () => void (shown = new Promise((resolve) => (show = resolve)))
     document.addEventListener('DOMContentLoaded', () => {
       const busy = document.getElementById('busy')!
-      new MutationObserver(() => {
-        if (!holding || busy.hidden) return
-        holding = false
-        held.splice(0).forEach((deliver, i) => setTimeout(deliver, i * gap))
-      }).observe(busy, { attributes: true, attributeFilter: ['hidden'] })
+      new MutationObserver(() => busy.hidden || show()).observe(busy, { attributes: true, attributeFilter: ['hidden'] })
     })
     const Native = window.Worker
     window.Worker = class extends Native {
@@ -37,7 +34,14 @@ async function slowWorker(page: Page, gap: number) {
         return super.onmessage
       }
       set onmessage(handler) {
-        super.onmessage = (event) => (holding ? held.push(() => handler?.call(this, event)) : handler?.call(this, event))
+        super.onmessage = (event) => {
+          // One chain for every answer: one arriving after the release still waits its turn.
+          const held = shown
+          delivered = delivered
+            .then(() => held)
+            .then(() => handler?.call(this, event))
+            .then(() => new Promise((resolve) => setTimeout(resolve, gap)))
+        }
       }
     }
   }, gap)
@@ -108,7 +112,11 @@ test('restricted and unlocked arriving 5 ms apart show step 2 as active before s
 })
 
 test('a tiny locked PDF reaches Done without ever showing the Unlocking screen', async ({ page }) => {
+  // A slow runner takes longer than the patience even on this file. With the page's clock stopped the
+  // patience never runs out, so this checks that every answer beating it shows at once.
+  await page.clock.install()
   await page.goto('/')
+  await page.clock.pauseAt(Date.now() + 60_000)
   await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
   await expect(screen(page, 'unlock')).toBeVisible()
   const busyShown = await watchBusy(page)
