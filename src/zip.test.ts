@@ -22,15 +22,6 @@ describe('storeZip', () => {
     expect(readZip(storeZip([{ name: 'Kontoauszug März.pdf', bytes: bytes('x') }]))[0].name).toBe('Kontoauszug März.pdf')
   })
 
-  it('numbers a repeated name, since an extractor would write one entry over the other', () => {
-    const file = { name: 'statement-unlocked.pdf', bytes: bytes('x') }
-    expect(readZip(storeZip([file, file, file])).map((entry) => entry.name)).toEqual([
-      'statement-unlocked.pdf',
-      'statement-unlocked (2).pdf',
-      'statement-unlocked (3).pdf',
-    ])
-  })
-
   it('writes an empty zip for no files', () => {
     expect(readZip(storeZip([]))).toEqual([])
   })

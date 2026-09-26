@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatSize, isPdf, unlockedName } from './file'
+import { formatSize, isPdf, lockedName, uniqueNames, unlockedName } from './file'
 
 describe('isPdf', () => {
   it.each([
@@ -32,6 +32,15 @@ describe('unlockedName', () => {
   })
 })
 
+describe('lockedName', () => {
+  it.each([
+    ['statement-unlocked.pdf', 'statement-locked.pdf'],
+    ['x-unlocked-unlocked.pdf', 'x-unlocked-locked.pdf'],
+  ])('names the locked copy of %j %j', (name, expected) => {
+    expect(lockedName(name)).toBe(expected)
+  })
+})
+
 describe('formatSize', () => {
   it.each([
     [0, '1 KB'],
@@ -42,5 +51,16 @@ describe('formatSize', () => {
     [12_345_678, '12.3 MB'],
   ])('shows %i bytes as %j', (bytes, expected) => {
     expect(formatSize(bytes)).toBe(expected)
+  })
+})
+
+describe('uniqueNames', () => {
+  it('numbers a repeated name, since two copies saved together would overwrite each other', () => {
+    expect(uniqueNames(['statement-unlocked.pdf', 'april-unlocked.pdf', 'statement-unlocked.pdf', 'statement-unlocked.pdf'])).toEqual([
+      'statement-unlocked.pdf',
+      'april-unlocked.pdf',
+      'statement-unlocked (2).pdf',
+      'statement-unlocked (3).pdf',
+    ])
   })
 })

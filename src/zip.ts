@@ -15,17 +15,6 @@ function crc32(bytes: Uint8Array) {
   return (c ^ 0xffffffff) >>> 0
 }
 
-// An extractor writes one entry over another with the same name, so repeats are numbered.
-function uniqueNames(names: string[]) {
-  const seen = new Set<string>()
-  return names.map((name) => {
-    let unique = name
-    for (let n = 2; seen.has(unique); n++) unique = name.replace(/(\.[^.]*)?$/, ` (${n})$1`)
-    seen.add(unique)
-    return unique
-  })
-}
-
 // MS-DOS time and date, in local time as zip tools read them.
 function dosTime(date: Date) {
   const time = (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1)
@@ -35,7 +24,7 @@ function dosTime(date: Date) {
 
 export function storeZip(files: ZipFile[], date = new Date()): Uint8Array {
   const { time, day } = dosTime(date)
-  const names = uniqueNames(files.map((file) => file.name)).map((name) => new TextEncoder().encode(name))
+  const names = files.map((file) => new TextEncoder().encode(file.name))
   const local: Uint8Array[] = []
   const central: Uint8Array[] = []
   let offset = 0

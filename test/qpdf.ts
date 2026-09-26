@@ -11,23 +11,28 @@ const load = createModule as unknown as (options: { wasmBinary: Uint8Array }) =>
 
 export const createQpdf: CreateQpdf = () => load({ wasmBinary })
 
-// Runs qpdf once on `input` and returns its exit code and /out.pdf, for building and checking fixtures.
+// Runs qpdf once on `input`, for building and checking fixtures.
 export async function qpdf(input: Uint8Array, args: string[]) {
-  const original = console.error
+  const stdout: string[] = []
+  // qpdf binds console.log and console.error when instantiated.
+  const original = { log: console.log, error: console.error }
+  console.log = (...parts: unknown[]) => void stdout.push(parts.join(' '))
   console.error = () => {}
   let q: Qpdf
   try {
     q = await createQpdf()
   } finally {
-    console.error = original
+    Object.assign(console, original)
   }
   q.FS.writeFile('/in.pdf', input)
   const code = q.callMain(args)
   const output = args.includes('/out.pdf') && (code === 0 || code === 3) ? q.FS.readFile('/out.pdf') : undefined
-  return { code, output }
+  return { code, stdout, output }
 }
 
-// qpdf --is-encrypted: 0 when locked, 2 when not.
+// Locked unless qpdf reads the file with no password and says so. Not --is-encrypted: this build
+// exits 2 on a PDF with an open password, the same as on one with no lock at all.
 export async function isLocked(pdf: Uint8Array) {
-  return (await qpdf(pdf, ['--is-encrypted', '/in.pdf'])).code === 0
+  const { code, stdout } = await qpdf(pdf, ['--show-encryption', '/in.pdf'])
+  return !(code === 0 && stdout.includes('File is not encrypted'))
 }

@@ -20,6 +20,12 @@ export function saveChoice(canShare: boolean, ios: boolean): SaveChoice {
   }
 }
 
+// How a batch's end screen offers its `count` unlocked copies at once.
+export function saveAllChoice(count: number, canShare: boolean, ios: boolean) {
+  const { share, download, shareLabel, primary } = saveChoice(canShare, ios)
+  return { share: !!count && share, download: !!count && download, shareLabel: `${shareLabel} all` as const, primary }
+}
+
 export type DoneOptions = { of?: number; password?: string | null; form?: Form | null }
 
 // `saved`: bytes the repack took off an input `of` bytes long. It is named at 5% of `of`.

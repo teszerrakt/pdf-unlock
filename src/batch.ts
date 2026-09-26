@@ -14,13 +14,11 @@ export type Batch = {
   typed: { password: string; remember: boolean } | null
 }
 
-// What happened to the file being worked on, or what the user did.
 export type Event =
   | { type: 'needs-password' | 'wrong-password' | 'unlocked' | 'not-locked' | 'unreadable' | 'skip' }
   | { type: 'typed'; password: string; remember: boolean }
   | { type: 'retry'; index: number }
 
-// What the page does next.
 export type Action =
   | { type: 'open'; index: number }
   | { type: 'unlock'; index: number; candidates: Candidate[] }
@@ -29,7 +27,7 @@ export type Action =
 
 export type Summary = { title: string; lede: string; unlocked: number }
 
-const texts: Record<RowState, string> = {
+export const rowText: Record<RowState, string> = {
   waiting: 'Waiting',
   unlocking: 'Unlocking…',
   'needs-password': 'Needs password',
@@ -39,12 +37,7 @@ const texts: Record<RowState, string> = {
   skipped: 'Skipped',
 }
 
-export const rowText = (state: RowState) => texts[state]
-
-export function start(count: number): { batch: Batch; action: Action } {
-  const rows = Array.from({ length: count }, (_, i): RowState => (i ? 'waiting' : 'unlocking'))
-  return { batch: { rows, at: 0, remembered: null, typed: null }, action: { type: 'open', index: 0 } }
-}
+export const start = (count: number) => advance({ rows: Array<RowState>(count).fill('waiting'), at: 0, remembered: null, typed: null })
 
 export function next(batch: Batch, event: Event, today = new Date()): { batch: Batch; action: Action } {
   const rows = [...batch.rows]
@@ -63,8 +56,7 @@ export function next(batch: Batch, event: Event, today = new Date()): { batch: B
       // Marked wrong only when the user typed the password that missed.
       return { batch: set('needs-password', { typed: null }), action: { type: 'ask', index: at, wrong: typed !== null } }
     case 'retry':
-      rows[event.index] = 'unlocking'
-      return { batch: { ...batch, rows, at: event.index, typed: null }, action: { type: 'open', index: event.index } }
+      return open({ ...batch, typed: null }, event.index)
     case 'unlocked':
       return advance(set('unlocked', { typed: null, remembered: typed?.remember ? typed.password : remembered }))
     case 'skip':
@@ -74,10 +66,13 @@ export function next(batch: Batch, event: Event, today = new Date()): { batch: B
   }
 }
 
-// Starts the first file still waiting, in pick order, or ends the batch.
 function advance(batch: Batch): { batch: Batch; action: Action } {
   const index = batch.rows.indexOf('waiting')
   if (index < 0) return { batch, action: { type: 'done', summary: summary(batch.rows) } }
+  return open(batch, index)
+}
+
+function open(batch: Batch, index: number): { batch: Batch; action: Action } {
   const rows = [...batch.rows]
   rows[index] = 'unlocking'
   return { batch: { ...batch, rows, at: index }, action: { type: 'open', index } }

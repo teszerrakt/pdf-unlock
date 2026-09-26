@@ -1,4 +1,3 @@
-// Reads a zip back through its central directory, for checking what src/zip.ts writes.
 export type Entry = { name: string; method: number; crc: number; size: number; compressedSize: number; bytes: Uint8Array }
 
 export function readZip(zip: Uint8Array): Entry[] {

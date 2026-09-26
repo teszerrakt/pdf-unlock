@@ -4,7 +4,6 @@ import { dateForms } from './dates'
 
 const today = new Date(2026, 8, 26, 12)
 
-// Starts a batch of `count` files and feeds it `events`, collecting every action it asks for.
 function run(count: number, events: Event[]) {
   let { batch, action } = start(count)
   const actions: Action[] = [action]
@@ -103,6 +102,6 @@ describe('summary', () => {
 describe('rowText', () => {
   it('names each row state', () => {
     const states: RowState[] = ['waiting', 'unlocking', 'needs-password', 'unlocked', 'not-locked', 'unreadable', 'skipped']
-    expect(states.map(rowText)).toEqual(['Waiting', 'Unlocking…', 'Needs password', 'Unlocked', 'Not locked', 'Unreadable', 'Skipped'])
+    expect(states.map((state) => rowText[state])).toEqual(['Waiting', 'Unlocking…', 'Needs password', 'Unlocked', 'Not locked', 'Unreadable', 'Skipped'])
   })
 })
