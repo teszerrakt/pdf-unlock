@@ -25,6 +25,9 @@ function dosTime(date: Date) {
 export function storeZip(files: ZipFile[], date = new Date()): Uint8Array {
   const { time, day } = dosTime(date)
   const names = files.map((file) => new TextEncoder().encode(file.name))
+  // The fields are 16 and 32 bits wide and would wrap silently, writing a zip that looks empty or corrupt.
+  const total = files.reduce((sum, { bytes }, i) => sum + 76 + 2 * names[i].length + bytes.length, 22)
+  if (files.length > 0xffff || total > 0xffffffff) throw new RangeError('Too many or too large files for one zip.')
   const local: Uint8Array[] = []
   const central: Uint8Array[] = []
   let offset = 0

@@ -18,6 +18,17 @@ describe('storeZip', () => {
     expect(entries.map((entry) => entry.bytes)).toEqual(files.map((file) => file.bytes))
   })
 
+  it('refuses more entries than a zip without zip64 can count', () => {
+    const files = Array.from({ length: 65536 }, () => ({ name: '', bytes: new Uint8Array(0) }))
+    expect(() => storeZip(files)).toThrow(RangeError)
+  })
+
+  it('refuses files that would push an offset or size past 4 GB, before reading any of them', () => {
+    // Only the lengths are read before the check, so no 4 GB is allocated.
+    const huge = { name: 'scan.pdf', bytes: { length: 2 ** 31 } as Uint8Array }
+    expect(() => storeZip([huge, huge])).toThrow(RangeError)
+  })
+
   it('keeps a name that is not ASCII', () => {
     expect(readZip(storeZip([{ name: 'Kontoauszug März.pdf', bytes: bytes('x') }]))[0].name).toBe('Kontoauszug März.pdf')
   })
