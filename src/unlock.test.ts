@@ -5,7 +5,6 @@ import { dateForms } from './dates'
 import { open, unlock, type CreateQpdf, type Outcome, type Prompt } from './unlock'
 
 const openFile = (pdf: Uint8Array, onRestricted?: () => void) => open(createQpdf, pdf, onRestricted)
-// The exact text alone, with no date forms.
 const typed = (password: string) => [{ password, form: null }]
 const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, typed(password))
 

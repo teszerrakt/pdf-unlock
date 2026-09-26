@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dateForms, formName } from './dates'
+import { dateForms, formName, tryingText, wrongText } from './dates'
 
 const today = new Date(2026, 8, 26)
 const passwords = (typed: string) => dateForms(typed, today).map(({ password }) => password)
@@ -40,5 +40,19 @@ describe('formName', () => {
     ['MMDDYY', 'month-day-year, short year'],
   ] as const)('names %s %s', (form, name) => {
     expect(formName(form)).toBe(name)
+  })
+})
+
+describe('the copy for date forms', () => {
+  it('counts the candidates on the Unlocking screen, the exact text included', () => {
+    expect(tryingText(4, 8)).toBe('Trying other ways of writing the date · 4 of 8')
+  })
+
+  it('counts the date forms tried on the wrong-password line', () => {
+    expect(wrongText(7)).toBe('Wrong password. Tried 7 ways of writing it as a date.')
+  })
+
+  it('keeps the plain wrong-password line when no date form was tried', () => {
+    expect(wrongText(0)).toBe('Wrong password. Try again.')
   })
 })

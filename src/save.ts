@@ -20,7 +20,6 @@ export function saveChoice(canShare: boolean, ios: boolean): SaveChoice {
   }
 }
 
-// `password` and `form`: the open password that worked and its date form, null for the exact text.
 export type DoneOptions = { of?: number; password?: string | null; form?: Form | null }
 
 // `saved`: bytes the repack took off an input `of` bytes long. It is named at 5% of `of`.

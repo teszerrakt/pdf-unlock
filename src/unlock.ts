@@ -13,7 +13,6 @@ export type CreateQpdf = () => Promise<Qpdf>
 
 // How an attempt ends (see CONTEXT.md).
 export type Outcome =
-  // `password`: the candidate that worked, `form` its date form (null for the exact text).
   | { type: 'unlocked'; pdf: Uint8Array; hadPassword: boolean; password: string | null; form: Form | null }
   | { type: 'not-locked' }
   | { type: 'unreadable'; message: string }
@@ -50,7 +49,7 @@ export async function open(create: CreateQpdf, input: Uint8Array, onRestricted?:
   const { code, errors } = await run(create, input, ['--is-encrypted', '/in.pdf'])
   if (code === 0) {
     onRestricted?.()
-    return unlock(create, input, null)
+    return decryptWith(create, input, null)
   }
   if (isPasswordError(errors)) return { type: 'needs-password' }
   if (code === 2 && !errors) return { type: 'not-locked' }
@@ -60,15 +59,14 @@ export async function open(create: CreateQpdf, input: Uint8Array, onRestricted?:
 // Lossless flags only: see Repack in CONTEXT.md.
 const repack = ['--object-streams=generate', '--recompress-flate', '--compression-level=9']
 
-// Removes the lock with the first candidate that opens the PDF, trying them in order, or with no
-// password for a restricted PDF. `onTry(n, of)` fires before each candidate after the first.
+// Removes the lock with the first candidate that opens the PDF, trying them in order.
+// `onTry(n, of)` fires before each candidate after the first.
 export async function unlock(
   create: CreateQpdf,
   input: Uint8Array,
-  candidates: Candidate[] | null,
+  candidates: Candidate[],
   onTry?: (n: number, of: number) => void,
 ): Promise<Outcome | Prompt> {
-  if (!candidates) return decryptWith(create, input, null)
   for (const [i, { password, form }] of candidates.entries()) {
     if (i > 0) onTry?.(i + 1, candidates.length)
     const result = await decryptWith(create, input, password)
@@ -78,6 +76,7 @@ export async function unlock(
   return { type: 'wrong-password' }
 }
 
+// Removes the lock with one open password, or with none for a restricted PDF.
 async function decryptWith(create: CreateQpdf, input: Uint8Array, password: string | null): Promise<Outcome | Prompt> {
   const args = password === null ? [] : [`--password=${password}`]
   const decrypt = (extra: string[] = []) => run(create, input, [...args, '--decrypt', ...extra, '/in.pdf', '/out.pdf'])
