@@ -133,6 +133,8 @@ test.describe('own password', () => {
     await expect(page.locator('#done-text')).toHaveText('Opens only with the password you set. Printing and copying stay allowed.')
     await expect(page.locator('#done-name')).toHaveText('statement-locked.pdf')
     await expect(page.locator('#done-info')).toHaveText(/^\d+ KB · Your password$/)
+    await expect(page.locator('#done-badge-locked')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add password', exact: true })).toBeHidden()
     const copy = await downloadCopy(page)
     expect(copy.name).toBe('statement-locked.pdf')
     expect(await isLocked(copy.pdf), 'the locked copy has no lock').toBe(true)

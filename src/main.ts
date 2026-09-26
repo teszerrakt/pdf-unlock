@@ -227,8 +227,7 @@ function finish(pdf: Uint8Array, hadPassword: boolean) {
   const name = unlockedName(fileName)
   unlocked = new File([pdf as BlobPart], name, { type: 'application/pdf' })
   offer(unlocked)
-  byId('done-title').textContent = 'Unlocked.'
-  addPassword.hidden = false
+  setDoneLocked(false)
   byId('done-name').textContent = name
   byId('done-info').textContent = `${formatSize(unlocked.size)} · No password`
   byId('done-text').textContent = doneText(fileName, hadPassword)
@@ -251,6 +250,14 @@ function offer(file: File) {
   download.hidden = !choice.download
   download.classList.toggle('primary', choice.primary === 'download')
   download.classList.toggle('secondary', choice.primary === 'share')
+}
+
+// Done shows the unlocked copy, or the locked copy once an own password is on it.
+function setDoneLocked(on: boolean) {
+  byId('done-title').textContent = on ? 'Locked.' : 'Unlocked.'
+  byId('done-badge-open').hidden = on
+  byId('done-badge-locked').hidden = !on
+  addPassword.hidden = on
 }
 
 function askOwnPassword() {
@@ -283,11 +290,10 @@ function finishLock(pdf: Uint8Array) {
   worker = null
   const name = lockedName(unlocked!.name)
   offer(new File([pdf as BlobPart], name, { type: 'application/pdf' }))
-  byId('done-title').textContent = 'Locked.'
+  setDoneLocked(true)
   byId('done-text').textContent = 'Opens only with the password you set. Printing and copying stay allowed.'
   byId('done-name').textContent = name
   byId('done-info').textContent = `${formatSize(pdf.length)} · Your password`
-  addPassword.hidden = true
   if (current !== 'busy') return show('done')
   setSteps(4)
   pending = window.setTimeout(() => show('done'), reducedMotion.matches ? 0 : 500)

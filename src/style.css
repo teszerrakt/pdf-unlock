@@ -604,13 +604,16 @@ kbd {
 .file-info {
   font-size: 13px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* A secondary action on the copy itself, so the action stack stays at three. */
 .card-action {
   flex-shrink: 0;
   height: 36px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: 12px;
   background: var(--raised);
   border: 1px solid var(--hairline);
