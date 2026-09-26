@@ -274,7 +274,12 @@ function clearOwnPassword() {
   setReveal(true, ownPassword, ownReveal)
 }
 
+// Also stops a lock that started but has not reached the busy screen yet.
 function leaveRelock() {
+  clearTimeout(pending)
+  worker?.terminate()
+  worker = null
+  locking = false
   clearOwnPassword()
   show('done')
 }
@@ -342,7 +347,7 @@ relockForm.addEventListener('submit', (event) => {
   ownPassword.value = ''
 })
 
-ownPassword.addEventListener('input', () => (lockSubmit.disabled = !ownPassword.value))
+ownPassword.addEventListener('input', () => (lockSubmit.disabled = locking || !ownPassword.value))
 ownReveal.addEventListener('click', () => setReveal(ownPassword.type === 'password', ownPassword, ownReveal))
 byId('relock-cancel').addEventListener('click', leaveRelock)
 byId('back').addEventListener('click', () => (current === 'relock' ? leaveRelock() : reset()))

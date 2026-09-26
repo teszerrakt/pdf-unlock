@@ -153,6 +153,31 @@ test.describe('own password', () => {
     })
   }
 
+  test('Cancel straight after Lock it stops the lock and keeps the unlocked copy', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    // In one task, so Cancel lands before the busy screen's 300 ms wait or the worker's answer.
+    await page.evaluate(() => {
+      document.getElementById('lock-submit')!.click()
+      document.getElementById('relock-cancel')!.click()
+    })
+    await page.waitForTimeout(1000)
+    await expect(page.getByRole('heading', { name: 'Unlocked.' })).toBeVisible()
+    await expect(screen(page, 'busy')).toBeHidden()
+    expect((await downloadUnlockedCopy(page)).name).toBe('statement-unlocked.pdf')
+  })
+
+  test('typing again while a lock runs does not start a second one', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    const disabled = await page.evaluate(() => {
+      const field = document.getElementById('new-password') as HTMLInputElement
+      document.getElementById('lock-submit')!.click()
+      field.value = 'other'
+      field.dispatchEvent(new Event('input'))
+      return (document.getElementById('lock-submit') as HTMLButtonElement).disabled
+    })
+    expect(disabled).toBe(true)
+  })
+
   test('the eye toggle hides the own password', async ({ page }) => {
     await page.getByRole('button', { name: 'Hide password', exact: true }).click()
     await expect(ownPassword(page)).toHaveAttribute('type', 'password')
