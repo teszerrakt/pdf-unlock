@@ -176,7 +176,10 @@ function startAttempt(file: File) {
   const attempt = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
   worker = attempt
   worker.onmessage = (event: MessageEvent<WorkerResponse>) => receive(attempt, event.data)
-  worker.onerror = () => (batch ? batchStep({ type: 'unreadable' }) : fail('Unlocking failed. Reload the page and try again.'))
+  worker.onerror = () => {
+    if (batch) receive(attempt, { type: 'unreadable', message: '' })
+    else fail('Unlocking failed. Reload the page and try again.')
+  }
   send({ type: 'open', file })
 }
 
@@ -338,7 +341,8 @@ function batchAnswer(response: WorkerResponse) {
   worker?.terminate()
   worker = null
   if (response.type === 'unlocked') {
-    batch!.copies[batch!.state.at] = new File([response.pdf as BlobPart], unlockedName(fileName), { type: 'application/pdf' })
+    password.value = ''
+    batch!.copies[batch!.state.at] =new File([response.pdf as BlobPart], unlockedName(fileName), { type: 'application/pdf' })
   }
   batchStep({ type: response.type })
 }

@@ -261,6 +261,33 @@ test.describe('batch', () => {
     await expect(rows(page)).toHaveText(['Unlocked', 'Not locked'])
   })
 
+  test('a worker that crashes marks its file unreadable, and the batch goes on', async ({ page }) => {
+    await page.addInitScript(() => {
+      const Native = window.Worker
+      const workers: Worker[] = ((window as unknown as { workers: Worker[] }).workers = [])
+      window.Worker = class extends Native {
+        constructor(...args: ConstructorParameters<typeof Worker>) {
+          super(...args)
+          workers.push(this)
+        }
+      }
+    })
+    await page.goto('/')
+    const pdf = await lockedPdf({ openPassword: 'secret' })
+    await pickFiles(page, [
+      ['march.pdf', pdf],
+      ['april.pdf', pdf],
+    ])
+    await expect(page.locator('#counter')).toHaveText('1 of 2')
+    await page.evaluate(() => (window as unknown as { workers: Worker[] }).workers.at(-1)!.dispatchEvent(new ErrorEvent('error')))
+    await expect(page.locator('#counter')).toHaveText('2 of 2')
+    await expect(page.getByRole('button', { name: 'Unlock', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: 'Skip this file' }).click()
+    await expect(rows(page)).toHaveText(['Unreadable', 'Skipped'])
+    await expect(page.locator('#batch-done-text')).toHaveText('One could not be read. One was skipped.')
+    await expect(page.getByRole('button', { name: 'Save all' })).toBeHidden()
+  })
+
   test('a single file picked never shows the batch and reaches Done as before', async ({ page }) => {
     await page.evaluate(() => {
       const batch = document.getElementById('batch')!
