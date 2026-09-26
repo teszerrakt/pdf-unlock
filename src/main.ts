@@ -415,8 +415,10 @@ window.addEventListener('drop', (event) => {
   drop.classList.remove('over')
   const file = event.dataTransfer?.files[0]
   if (!file) return
-  if (isPdf(file)) openFile(file)
-  else stop('That’s not a PDF.', `${file.name} is not a PDF. Choose a PDF file.`)
+  if (isPdf(file)) return openFile(file)
+  // A drop abandons the attempt in progress, so its worker cannot answer over this screen.
+  clear()
+  stop('That’s not a PDF.', `${file.name} is not a PDF. Choose a PDF file.`)
 })
 
 document.addEventListener('paste', (event) => {

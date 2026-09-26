@@ -178,6 +178,20 @@ test.describe('own password', () => {
     expect(disabled).toBe(true)
   })
 
+  test('dropping a file that is not a PDF while a lock runs stops the lock', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    // In one task, so the drop lands before the busy screen's 300 ms wait or the worker's answer.
+    await page.evaluate(() => {
+      document.getElementById('lock-submit')!.click()
+      const dataTransfer = new DataTransfer()
+      dataTransfer.items.add(new File(['notes'], 'notes.txt', { type: 'text/plain' }))
+      document.getElementById('drop')!.dispatchEvent(new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }))
+    })
+    await page.waitForTimeout(1000)
+    await expect(page.locator('#stop-title')).toHaveText('That’s not a PDF.')
+    await expect(screen(page, 'stop')).toBeVisible()
+  })
+
   test('the eye toggle hides the own password', async ({ page }) => {
     await page.getByRole('button', { name: 'Hide password', exact: true }).click()
     await expect(ownPassword(page)).toHaveAttribute('type', 'password')
