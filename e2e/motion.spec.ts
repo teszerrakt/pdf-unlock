@@ -9,24 +9,35 @@ test.use({ reducedMotion: 'no-preference' })
 type Tick = { step: number; classes: string[]; at: number }
 declare global {
   interface Window {
-    holdWorker(): void
+    holdWorker(untilBusy?: boolean): void
+    releaseWorker(): void
+    workerAnswers: number
+    workerDelivered(): Promise<unknown>
     stepLog: Tick[]
     busyShown: boolean
   }
 }
 
 // Qpdf answers these fixtures in tens of ms, well inside the patience, so the Unlocking screen would
-// never show. Once `holdWorker()` is called, the worker's answers wait until it does, then reach the
-// page in order, `gap` ms apart: a device slow enough to show the screen, the pacing left to the page.
+// never show. Once `holdWorker()` is called, the worker's answers wait until it does (or, with
+// `untilBusy` false, until `releaseWorker()`), then reach the page in order, `gap` ms apart: a device
+// slow enough to show the screen, the pacing left to the page.
 async function slowWorker(page: Page, gap: number) {
   await page.addInitScript((gap) => {
     let shown = Promise.resolve()
     let show = () => {}
-    let delivered = Promise.resolve()
-    window.holdWorker = () => void (shown = new Promise((resolve) => (show = resolve)))
+    let untilBusy = true
+    let delivered: Promise<unknown> = Promise.resolve()
+    window.workerAnswers = 0
+    window.holdWorker = (release = true) => {
+      untilBusy = release
+      shown = new Promise((resolve) => (show = resolve))
+    }
+    window.releaseWorker = () => show()
+    window.workerDelivered = () => delivered
     document.addEventListener('DOMContentLoaded', () => {
       const busy = document.getElementById('busy')!
-      new MutationObserver(() => busy.hidden || show()).observe(busy, { attributes: true, attributeFilter: ['hidden'] })
+      new MutationObserver(() => busy.hidden || (untilBusy && show())).observe(busy, { attributes: true, attributeFilter: ['hidden'] })
     })
     const Native = window.Worker
     window.Worker = class extends Native {
@@ -35,6 +46,7 @@ async function slowWorker(page: Page, gap: number) {
       }
       set onmessage(handler) {
         super.onmessage = (event) => {
+          window.workerAnswers++
           // One chain for every answer: one arriving after the release still waits its turn.
           const held = shown
           delivered = delivered
@@ -145,15 +157,18 @@ test('a bloated locked PDF ticks steps 1, 2 and 3 in order, the second at least 
 test('dropping a file that is not a PDF while an answer waits its turn keeps the stop screen', async ({ page }) => {
   await slowWorker(page, 5)
   await page.goto('/')
-  await page.evaluate(() => window.holdWorker())
+  await page.evaluate(() => window.holdWorker(false))
   await pickFile(page, 'form.pdf', await restrictedPdf())
   await expect(screen(page, 'busy')).toBeVisible()
-  const dataTransfer = await page.evaluateHandle(() => {
+  // Both answers are in hand, so once released, unlocked waits a step floor behind restricted.
+  await page.waitForFunction(() => window.workerAnswers === 2)
+  await page.evaluate(async () => {
+    window.releaseWorker()
+    await window.workerDelivered()
     const transfer = new DataTransfer()
     transfer.items.add(new File(['plain text'], 'notes.txt', { type: 'text/plain' }))
-    return transfer
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, cancelable: true }))
   })
-  await page.dispatchEvent('#drop', 'drop', { dataTransfer })
   await expect(page.locator('#stop-title')).toHaveText('That’s not a PDF.')
   // The queued answers would run within 700 ms of the screen showing, then hold the last tick 500 ms.
   await page.waitForTimeout(1500)
