@@ -5,8 +5,7 @@ import { readFileSync } from 'node:fs'
 import { qpdf } from './qpdf'
 
 // One page that says "Sphynx fixture". The wasm build of qpdf cannot repair a bad xref, so it is computed.
-function source() {
-  const content = 'BT /F1 24 Tf 20 60 Td (Sphynx fixture) Tj ET'
+function source(content = 'BT /F1 24 Tf 20 60 Td (Sphynx fixture) Tj ET') {
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -39,9 +38,10 @@ type Lock = {
 }
 
 // A locked PDF: an open password, restrictions, or both.
-export async function lockedPdf({ openPassword = '', ownerPassword = 'owner', bits = 256 }: Lock = {}) {
+export async function lockedPdf({ openPassword = '', ownerPassword = 'owner', bits = 256 }: Lock = {}, pdf = plainPdf(), write: string[] = []) {
   const restrictions = openPassword ? [] : ['--print=none', '--extract=n', '--modify=none']
   const args = [
+    ...write,
     ...(bits === 40 ? ['--allow-weak-crypto'] : []),
     '--encrypt',
     `--user-password=${openPassword}`,
@@ -53,13 +53,20 @@ export async function lockedPdf({ openPassword = '', ownerPassword = 'owner', bi
     '/in.pdf',
     '/out.pdf',
   ]
-  const { code, output } = await qpdf(plainPdf(), args)
+  const { code, output } = await qpdf(pdf, args)
   if (!output) throw new Error(`qpdf could not build the fixture (exit ${code}): ${args.join(' ')}`)
   return output
 }
 
 // A locked PDF with restrictions and no open password.
 export const restrictedPdf = (ownerPassword = 'owner') => lockedPdf({ ownerPassword })
+
+// A locked PDF written the way scanners and form exporters write one: the same page with about
+// 270 KB of text drawing, streams left uncompressed and no object streams.
+export function bloatedPdf({ openPassword = '' }: Pick<Lock, 'openPassword'> = {}) {
+  const lines = Array.from({ length: 5000 }, (_, i) => `BT /F1 8 Tf 10 ${i % 140} Td (Sphynx fixture line ${i}) Tj ET`)
+  return lockedPdf({ openPassword }, source(lines.join('\n')), ['--compress-streams=n', '--object-streams=disable'])
+}
 
 // Bytes that are not a PDF at all, and a PDF cut off halfway.
 export const notPdf = () => new TextEncoder().encode('This is a plain text file, not a PDF.\n')

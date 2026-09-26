@@ -205,7 +205,7 @@ function finish(pdf: Uint8Array, hadPassword: boolean) {
   download.classList.toggle('secondary', choice.primary === 'share')
   byId('done-name').textContent = name
   byId('done-info').textContent = `${formatSize(unlocked.size)} · No password`
-  byId('done-text').textContent = doneText(fileName, hadPassword)
+  byId('done-text').textContent = doneText(fileName, hadPassword, fileSize - unlocked.size, { of: fileSize })
   if (current !== 'busy') return show('done')
   // Let the last step tick before leaving the Unlocking screen.
   setSteps(4)

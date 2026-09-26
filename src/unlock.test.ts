@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { brokenPdf, lockedPdf, notPdf, plainPdf, realWorld, restrictedPdf } from '../test/fixtures'
+import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, realWorld, restrictedPdf } from '../test/fixtures'
 import { createQpdf, isLocked, qpdf } from '../test/qpdf'
-import { open, unlock, type Outcome, type Prompt } from './unlock'
+import { open, unlock, type CreateQpdf, type Outcome, type Prompt } from './unlock'
 
 const openFile = (pdf: Uint8Array, onRestricted?: () => void) => open(createQpdf, pdf, onRestricted)
 const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, password)
@@ -84,6 +84,36 @@ describe('real-world locked PDFs', () => {
 
   it('unlocks the Quartz restricted PDF with no password prompt', async () => {
     await expectUnlockedCopy(await openFile(realWorld('quartz-restricted.pdf')), false)
+  })
+})
+
+describe('repacking the unlocked copy', () => {
+  it('makes the unlocked copy of a bloated PDF smaller than the input, and smaller than a plain decrypt', async () => {
+    const pdf = await bloatedPdf({ openPassword: 'secret' })
+    const result = await tryPassword(pdf, 'secret')
+    await expectUnlockedCopy(result, true)
+    const copy = (result as Extract<Outcome, { type: 'unlocked' }>).pdf
+    expect(copy.length).toBeLessThan(pdf.length)
+    // qpdf compresses uncompressed streams on any rewrite, so the repack has to beat that too.
+    const plain = await qpdf(pdf, ['--password=secret', '--decrypt', '/in.pdf', '/out.pdf'])
+    expect(copy.length).toBeLessThan(plain.output!.length)
+  })
+
+  it('still unlocks, with a plain decrypt, when the repack run fails', async () => {
+    const calls: string[][] = []
+    const failingRepack: CreateQpdf = async () => {
+      const q = await createQpdf()
+      const callMain = q.callMain.bind(q)
+      q.callMain = (args) => {
+        calls.push(args)
+        return args.includes('--object-streams=generate') ? 2 : callMain(args)
+      }
+      return q
+    }
+    const result = await unlock(failingRepack, await lockedPdf({ openPassword: 'secret' }), 'secret')
+    await expectUnlockedCopy(result, true)
+    expect(calls).toHaveLength(2)
+    expect(calls[1]).not.toEqual(expect.arrayContaining([expect.stringMatching(/object-streams|recompress-flate|compression-level/)]))
   })
 })
 
