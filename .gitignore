@@ -4,3 +4,5 @@ dev-dist
 .vercel
 .wrangler
 /art/
+test-results
+playwright-report

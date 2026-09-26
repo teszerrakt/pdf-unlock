@@ -1,7 +1,26 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { SHARE_ACTION } from './src/share-target.ts'
 import pkg from './package.json' with { type: 'json' }
+import vercel from './vercel.json' with { type: 'json' }
+
+// `vite preview` sends the production headers from vercel.json, so e2e runs under the real CSP.
+// Not in dev: the CSP would block Vite's injected scripts.
+function productionHeaders(): Plugin {
+  const rules = vercel.headers.map(({ source, headers }) => ({ pattern: new RegExp(`^${source}$`), headers }))
+  return {
+    name: 'production-headers',
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = new URL(req.url ?? '/', 'http://localhost').pathname
+        for (const { pattern, headers } of rules) {
+          if (pattern.test(path)) for (const { key, value } of headers) res.setHeader(key, value)
+        }
+        next()
+      })
+    },
+  }
+}
 
 export default defineConfig({
   worker: { format: 'es' },
@@ -13,6 +32,7 @@ export default defineConfig({
   server: { allowedHosts: ['.ts.net'] },
   preview: { allowedHosts: ['.ts.net'] },
   plugins: [
+    productionHeaders(),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
