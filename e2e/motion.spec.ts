@@ -43,7 +43,6 @@ async function slowWorker(page: Page, gap: number) {
   }, gap)
 }
 
-// Logs every class change on the busy steps, in order, with the time it happened.
 async function recordSteps(page: Page) {
   await page.evaluate(() => {
     const log: Tick[] = (window.stepLog = [])
@@ -65,7 +64,6 @@ async function recordSteps(page: Page) {
   }
 }
 
-// Notes whether the Unlocking screen is ever made visible from here on.
 async function watchBusy(page: Page) {
   await page.evaluate(() => {
     const busy = document.getElementById('busy')!

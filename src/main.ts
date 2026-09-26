@@ -41,7 +41,7 @@ const PATIENCE = 300
 // Once the Unlocking screen shows, its steps tick at least this many ms apart. Batch rows change at
 // least ROW_FLOOR apart, adding at most ROW_CAP of wait per batch; date tries count TRY_FLOOR apart.
 // Every floor is 0 under reduced motion. Exported so the ones no screen uses yet still typecheck.
-export const STEP_FLOOR = 350
+const STEP_FLOOR = 350
 export const ROW_FLOOR = 200
 export const ROW_CAP = 2000
 export const TRY_FLOOR = 150
@@ -154,8 +154,8 @@ function openFile(file: File) {
   send({ type: 'open', file })
 }
 
-// An answer that lands before the Unlocking screen shows runs at once, so quick work never shows it.
-// Once it shows, answers queue and tick a step floor apart; one left over from an abandoned attempt is dropped.
+// Answers before the Unlocking screen shows are not paced, so quick work never shows it. A queued
+// answer from an abandoned attempt is dropped.
 function receive(attempt: Worker, response: WorkerResponse) {
   if (current !== 'busy') return handle(response)
   pace.push(() => worker === attempt && handle(response))

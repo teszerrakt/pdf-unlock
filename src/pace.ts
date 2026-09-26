@@ -1,7 +1,6 @@
-// Spaces out what the page shows so quick updates do not blur. Paces the display, never the work:
-// updates queue and run in push order; nothing is dropped. Pure timing, no DOM.
+// Spaces out what the page shows so quick updates do not blur. Paces the display, never the work.
 
-export type Clock = { now(): number; later(fn: () => void, ms: number): unknown }
+type Clock = { now(): number; later(fn: () => void, ms: number): unknown }
 
 const realClock: Clock = { now: () => performance.now(), later: (fn, ms) => setTimeout(fn, ms) }
 
