@@ -15,6 +15,7 @@ declare global {
     workerDelivered(): Promise<unknown>
     stepLog: Tick[]
     busyShown: boolean
+    tryLog: { text: string; at: number }[]
   }
 }
 
@@ -174,4 +175,51 @@ test('dropping a file that is not a PDF while an answer waits its turn keeps the
   await page.waitForTimeout(1500)
   await expect(screen(page, 'stop')).toBeVisible()
   await expect(screen(page, 'done')).toBeHidden()
+})
+
+test('date forms count up under step 2, at least 150 ms apart, before the wrong password shows', async ({ page }) => {
+  await slowWorker(page, 0)
+  await page.clock.setFixedTime(new Date(2026, 8, 26, 12))
+  await page.goto('/')
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: '05081990' }))
+  await expect(screen(page, 'unlock')).toBeVisible()
+  await page.evaluate(() => {
+    const log: { text: string; at: number }[] = (window.tryLog = [])
+    const trying = document.getElementById('trying')!
+    new MutationObserver(() => log.push({ text: trying.textContent!, at: performance.now() })).observe(trying, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    })
+    window.holdWorker()
+  })
+  await enterPassword(page, '060890')
+  await expect(page.locator('#wrong')).toHaveText('Wrong password. Tried 7 ways of writing it as a date.')
+
+  const log = await page.evaluate(() => window.tryLog)
+  expect(log.map(({ text }) => text)).toEqual([2, 3, 4, 5, 6, 7, 8].map((n) => `Trying other ways of writing the date · ${n} of 8`))
+  const gaps = log.slice(1).map(({ at }, i) => at - log[i].at)
+  expect(Math.min(...gaps), 'ms between two counts').toBeGreaterThanOrEqual(140)
+})
+
+test('after a date form worked, adding a password shows the Locking steps with no try count', async ({ page }) => {
+  await slowWorker(page, 0)
+  await page.clock.setFixedTime(new Date(2026, 8, 26, 12))
+  await page.goto('/')
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: '05081990' }))
+  await expect(screen(page, 'unlock')).toBeVisible()
+  await page.evaluate(() => window.holdWorker())
+  await enterPassword(page, '900805')
+  await expect(page.locator('#trying')).toHaveText('Trying other ways of writing the date · 2 of 6')
+  await expect(screen(page, 'done')).toBeVisible()
+  await expect(page.locator('#done-text')).toContainText('Your password worked written as 05081990 (day-month-year).')
+
+  await page.getByRole('button', { name: 'Add password', exact: true }).click()
+  await page.getByLabel('New password', { exact: true }).fill('hunter2')
+  await page.evaluate(() => window.holdWorker())
+  await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+  await expect(screen(page, 'busy')).toBeVisible()
+  await expect(page.locator('#steps li').nth(1)).toHaveText('Adding your password', { useInnerText: true })
+  await expect(page.locator('#trying')).toBeHidden()
+  await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
 })

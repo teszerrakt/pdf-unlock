@@ -814,6 +814,12 @@ kbd {
   font-weight: 600;
 }
 
+/* Under its step's label, not bold with it. */
+.step-note {
+  display: block;
+  font-weight: 400;
+}
+
 .dot {
   position: relative;
   width: 22px;
@@ -925,6 +931,98 @@ kbd {
 .stop .lede {
   margin: 10px auto 0;
   overflow-wrap: anywhere;
+}
+
+/* Batch */
+
+.counter {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.remember {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.remember input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 2px 18px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+}
+
+.rows li {
+  min-height: 52px;
+  padding: 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rows li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.row-name {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-state {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--muted);
+  transition: color 0.3s ease;
+}
+
+[data-state='unlocking'] .row-state,
+[data-state='needs-password'] .row-state {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+[data-state='unlocked'] .row-state {
+  color: var(--accent);
+}
+
+.row-action {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border: 1px solid var(--hairline);
+  background: var(--raised);
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.done .rows {
+  margin-top: 24px;
 }
 
 /* Toast */
