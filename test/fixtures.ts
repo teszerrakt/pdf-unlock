@@ -61,11 +61,11 @@ export async function lockedPdf({ openPassword = '', ownerPassword = 'owner', bi
 // A locked PDF with restrictions and no open password.
 export const restrictedPdf = (ownerPassword = 'owner') => lockedPdf({ ownerPassword })
 
-// A locked PDF written the way scanners and form exporters write one: the same page with about
-// 270 KB of text drawing, streams left uncompressed and no object streams.
-export function bloatedPdf({ openPassword = '' }: Pick<Lock, 'openPassword'> = {}) {
+// A locked PDF written the way scanners and form exporters write one. About 270 KB, so the saving
+// clears the 50 KB the Done text needs before it names one.
+export function bloatedPdf(lock: Pick<Lock, 'openPassword'> = {}) {
   const lines = Array.from({ length: 5000 }, (_, i) => `BT /F1 8 Tf 10 ${i % 140} Td (Sphynx fixture line ${i}) Tj ET`)
-  return lockedPdf({ openPassword }, source(lines.join('\n')), ['--compress-streams=n', '--object-streams=disable'])
+  return lockedPdf(lock, source(lines.join('\n')), ['--compress-streams=n', '--object-streams=disable'])
 }
 
 // Bytes that are not a PDF at all, and a PDF cut off halfway.

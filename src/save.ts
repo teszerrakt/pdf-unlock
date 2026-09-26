@@ -19,18 +19,11 @@ export function saveChoice(canShare: boolean, ios: boolean): SaveChoice {
   }
 }
 
-// `saved`: how many bytes the repack took off, out of an input `of` bytes long.
 export type DoneOptions = { of?: number }
 
-// A saving is worth a mention at 50 KB and 5% of the input; without `of`, only the 50 KB counts.
-const worthSaying = (saved: number, of?: number) => saved >= 50_000 && (of === undefined || saved * 20 >= of)
-
-export function doneText(fileName: string, hadPassword: boolean, saved = 0, { of }: DoneOptions = {}) {
-  const smaller = worthSaying(saved, of) ? formatSize(saved) : null
-  if (hadPassword) {
-    const text = 'This copy opens anywhere, no password needed.'
-    return smaller ? `${text} It’s also ${smaller} smaller.` : text
-  }
-  const text = `${fileName} had no open password, only print or copy limits. This copy has none`
-  return smaller ? `${text}, and is ${smaller} smaller.` : `${text}.`
+// `saved`: bytes the repack took off an input `of` bytes long. It is named at 5% of `of`.
+export function doneText(fileName: string, hadPassword: boolean, saved = 0, { of = 0 }: DoneOptions = {}) {
+  const smaller = saved >= 50_000 && saved * 20 >= of ? formatSize(saved) : null
+  if (hadPassword) return `This copy opens anywhere, no password needed.${smaller ? ` It’s also ${smaller} smaller.` : ''}`
+  return `${fileName} had no open password, only print or copy limits. This copy has none${smaller ? `, and is ${smaller} smaller` : ''}.`
 }

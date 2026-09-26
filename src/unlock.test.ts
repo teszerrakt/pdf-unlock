@@ -12,6 +12,7 @@ async function expectUnlockedCopy(result: Outcome | Prompt, hadPassword: boolean
   const { pdf } = result as Extract<Outcome, { type: 'unlocked' }>
   expect(await isLocked(pdf)).toBe(false)
   expect((await qpdf(pdf, ['--check', '/in.pdf'])).code).toBe(0)
+  return pdf
 }
 
 describe('opening a file', () => {
@@ -90,9 +91,7 @@ describe('real-world locked PDFs', () => {
 describe('repacking the unlocked copy', () => {
   it('makes the unlocked copy of a bloated PDF smaller than the input, and smaller than a plain decrypt', async () => {
     const pdf = await bloatedPdf({ openPassword: 'secret' })
-    const result = await tryPassword(pdf, 'secret')
-    await expectUnlockedCopy(result, true)
-    const copy = (result as Extract<Outcome, { type: 'unlocked' }>).pdf
+    const copy = await expectUnlockedCopy(await tryPassword(pdf, 'secret'), true)
     expect(copy.length).toBeLessThan(pdf.length)
     // qpdf compresses uncompressed streams on any rewrite, so the repack has to beat that too.
     const plain = await qpdf(pdf, ['--password=secret', '--decrypt', '/in.pdf', '/out.pdf'])

@@ -54,15 +54,16 @@ export async function open(create: CreateQpdf, input: Uint8Array, onRestricted?:
   return unreadable(errors)
 }
 
-// The repack (see CONTEXT.md): lossless, so image and font bytes are the same once inflated.
+// Lossless flags only: see Repack in CONTEXT.md.
 const repack = ['--object-streams=generate', '--recompress-flate', '--compression-level=9']
 
 // Removes the lock with the given open password, or with none for a restricted PDF.
 export async function unlock(create: CreateQpdf, input: Uint8Array, password: string | null): Promise<Outcome | Prompt> {
-  const args = [...(password === null ? [] : [`--password=${password}`]), '--decrypt']
-  let { errors, output } = await run(create, input, [...args, ...repack, '/in.pdf', '/out.pdf'])
-  // Never worse than no repack: a file the repack chokes on gets the plain decrypt.
-  if (!output && !isPasswordError(errors)) ({ errors, output } = await run(create, input, [...args, '/in.pdf', '/out.pdf']))
+  const args = password === null ? [] : [`--password=${password}`]
+  const decrypt = (extra: string[] = []) => run(create, input, [...args, '--decrypt', ...extra, '/in.pdf', '/out.pdf'])
+  let { errors, output } = await decrypt(repack)
+  // A file the repack run fails on gets the plain decrypt; a wrong password would fail that too.
+  if (!output && !isPasswordError(errors)) ({ errors, output } = await decrypt())
   if (output) return { type: 'unlocked', pdf: output, hadPassword: password !== null }
   if (isPasswordError(errors)) return { type: password === null ? 'needs-password' : 'wrong-password' }
   return unreadable(errors)
