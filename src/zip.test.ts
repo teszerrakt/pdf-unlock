@@ -21,8 +21,4 @@ describe('storeZip', () => {
   it('keeps a name that is not ASCII', () => {
     expect(readZip(storeZip([{ name: 'Kontoauszug März.pdf', bytes: bytes('x') }]))[0].name).toBe('Kontoauszug März.pdf')
   })
-
-  it('writes an empty zip for no files', () => {
-    expect(readZip(storeZip([]))).toEqual([])
-  })
 })

@@ -52,11 +52,11 @@ const isIos = detectIos(platform, navigator.maxTouchPoints)
 const PATIENCE = 300
 // Once the Unlocking screen shows, its steps tick at least this many ms apart. Batch rows change at
 // least ROW_FLOOR apart, adding at most ROW_CAP of wait per batch; date tries count TRY_FLOOR apart.
-// Every floor is 0 under reduced motion.
+// Every floor is 0 under reduced motion. Exported so the ones no screen uses yet still typecheck.
 const STEP_FLOOR = 350
-const ROW_FLOOR = 200
-const ROW_CAP = 2000
-const TRY_FLOOR = 150
+export const ROW_FLOOR = 200
+export const ROW_CAP = 2000
+export const TRY_FLOOR = 150
 
 let worker: Worker | null = null
 let fileName = ''
@@ -186,7 +186,11 @@ function send(request: WorkerRequest) {
 function startWorker(answer: (attempt: Worker, response: WorkerResponse) => void) {
   const started = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
   started.onmessage = (event: MessageEvent<WorkerResponse>) => answer(started, event.data)
-  started.onerror = () => answer(started, { type: 'unreadable', message: 'Unlocking failed. Reload the page and try again.' })
+  started.onerror = () => {
+    // In a batch a crash is that file's outcome, and the batch goes on.
+    if (batch) answer(started, { type: 'unreadable', message: '' })
+    else fail('Unlocking failed. Reload the page and try again.')
+  }
   worker = started
 }
 
