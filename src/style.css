@@ -779,13 +779,10 @@ kbd {
   font-weight: 600;
 }
 
+/* Under its step's label, not bold with it. */
 .step-note {
   display: block;
-  margin-top: 2px;
-  font-size: 13px;
   font-weight: 400;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .dot {
