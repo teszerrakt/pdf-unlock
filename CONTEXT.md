@@ -50,6 +50,10 @@ _Avoid_: Cancelled, reset
 The new PDF Sphynx produces from a locked PDF: same content, no open password, no restrictions. The original file is never changed.
 _Avoid_: Output, decrypted file, unlocked PDF
 
+**Repack**:
+The lossless rewrite qpdf does while producing the unlocked copy: object streams, recompressed deflate. Image and font bytes are the same once inflated. Always on, in the same run as the unlock.
+_Avoid_: Compress, optimise, shrink
+
 **Outcome**:
 How an attempt ends when it is not abandoned: _unlocked_, _not locked_, or _unreadable_.
 _Avoid_: Result, status, response
