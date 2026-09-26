@@ -360,6 +360,32 @@ test.describe('batch', () => {
   test.describe('with motion on', () => {
     test.use({ reducedMotion: 'no-preference' })
 
+    test('a Skip while a wrong password waits its turn never marks the next file’s prompt wrong', async ({ page }) => {
+      const pdf = await lockedPdf({ openPassword: 'secret' })
+      await pickFiles(page, [
+        ['march.pdf', pdf],
+        ['plain.pdf', plainPdf()],
+        ['may.pdf', pdf],
+      ])
+      await expect(page.locator('#counter')).toHaveText('1 of 3')
+      await page.evaluate(async () => {
+        const log: string[] = ((window as unknown as { titleLog: string[] }).titleLog = [])
+        const title = document.getElementById('unlock-title')!
+        const counter = document.getElementById('counter')!
+        new MutationObserver(() => log.push(`${counter.textContent} ${title.textContent}`)).observe(title, { childList: true, characterData: true, subtree: true })
+        ;(document.getElementById('password') as HTMLInputElement).value = 'nope'
+        document.getElementById('submit')!.click()
+        // The wrong password answers in tens of ms; its prompt then waits in the row pacer.
+        await new Promise((resolve) => setTimeout(resolve, 120))
+        document.getElementById('cancel')!.click()
+      })
+      await expect(page.locator('#counter')).toHaveText('3 of 3')
+      await page.waitForTimeout(800)
+      await expect(page.locator('#wrong')).toBeHidden()
+      const log = await page.evaluate(() => (window as unknown as { titleLog: string[] }).titleLog)
+      expect(log.filter((entry) => /^[23] of 3 Not quite\.$/.test(entry))).toEqual([])
+    })
+
     test('the rows change at least 200 ms apart while the batch works', async ({ page }) => {
       await page.evaluate(() => {
         const log: number[] = ((window as unknown as { rowLog: number[] }).rowLog = [])

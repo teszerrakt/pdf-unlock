@@ -448,8 +448,11 @@ function act(action: Action) {
     case 'unlock':
       datesTried = action.candidates.length - 1
       return send({ type: 'unlock', candidates: action.candidates })
-    case 'ask':
-      return display(() => askPassword(action.wrong))
+    case 'ask': {
+      // A Skip while this waits its turn moves the batch on; the prompt must not open for the next file.
+      const stillAsked = () => batch!.state.at === action.index && batch!.state.rows[action.index] === 'needs-password'
+      return display(() => stillAsked() && askPassword(action.wrong))
+    }
     case 'done':
       return display(() => finishBatch(action.summary))
   }
