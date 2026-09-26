@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { next, rowText, start, summary, type Action, type Event, type RowState } from './batch'
+import { next, rowText, settled, start, summary, type Action, type Event, type RowState } from './batch'
 import { dateForms } from './dates'
 
 const today = new Date(2026, 8, 26, 12)
@@ -80,6 +80,14 @@ describe('a batch', () => {
       type: 'done',
       summary: { title: '2 of 4 unlocked.', lede: 'One file had no password to remove. One was skipped.', unlocked: 2 },
     })
+  })
+})
+
+describe('settled', () => {
+  it('holds once every file has an outcome or was skipped, and not while one is still being worked on', () => {
+    expect(settled(run(2, [{ type: 'unlocked' }, { type: 'needs-password' }, { type: 'skip' }]).batch)).toBe(true)
+    expect(settled(run(2, [{ type: 'unlocked' }, { type: 'needs-password' }]).batch)).toBe(false)
+    expect(settled(run(2, [{ type: 'unlocked' }, { type: 'needs-password' }, { type: 'skip' }, { type: 'retry', index: 1 }]).batch)).toBe(false)
   })
 })
 

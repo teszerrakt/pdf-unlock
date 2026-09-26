@@ -10,7 +10,7 @@ import { browserName, isIos as detectIos, modifierKey, type Brand } from './plat
 import { dateForms, tryingText, wrongText } from './dates'
 import { doneText, saveAllChoice, saveChoice } from './save'
 import { createPacer } from './pace'
-import { next, rowText, start, type Action, type Batch, type Event as BatchEvent, type RowState, type Summary } from './batch'
+import { next, rowText, settled, start, type Action, type Batch, type Event as BatchEvent, type RowState, type Summary } from './batch'
 import { storeZip } from './zip'
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -75,7 +75,8 @@ let datesTried = 0
 // Locking runs after Done, so its busy and Locked screens slide in forward.
 let locking = false
 // A batch's unlocked copies and their object URLs stay in memory until Unlock more or leaving.
-type BatchRun = { files: File[]; state: Batch; names: string[]; copies: (File | null)[]; urls: string[] }
+// `asked`: the file the password prompt was shown for, so a late Skip or Unlock cannot act on the next one.
+type BatchRun = { files: File[]; state: Batch; names: string[]; copies: (File | null)[]; urls: string[]; asked: number | null }
 let batch: BatchRun | null = null
 let rows = createPacer(0)
 
@@ -172,7 +173,7 @@ function clear() {
 
 function reset() {
   // Cancel and Back on a batch's password prompt skip that file; the batch goes on.
-  if (batch && current === 'unlock') return skip()
+  if (batch && current !== 'batch-done') return skip()
   clear()
   if (updateReady) return location.reload()
   show('pick')
@@ -247,6 +248,7 @@ function askPassword(wrongOne: boolean) {
     password.value = ''
     setWrong(false)
   }
+  if (batch) batch.asked = batch.state.at
   if (batch) byId('counter').textContent = `${batch.state.at + 1} of ${batch.files.length}`
   byId('remember-row').hidden = !batch
   byId('cancel').textContent = batch ? 'Skip this file' : 'Cancel'
@@ -379,7 +381,7 @@ function openFiles(files: File[]) {
   if (files.length === 1) return openFile(files[0])
   clear()
   const { batch: state, action } = start(files.length)
-  batch = { files, state, names: uniqueNames(files.map((file) => unlockedName(file.name || 'document.pdf'))), copies: [], urls: [] }
+  batch = { files, state, names: uniqueNames(files.map((file) => unlockedName(file.name || 'document.pdf'))), copies: [], urls: [], asked: null }
   rows = createPacer(reducedMotion.matches ? 0 : ROW_FLOOR, ROW_CAP)
   remember.checked = true
   byId('batch-title').textContent = `Unlocking ${files.length} files`
@@ -454,6 +456,8 @@ function act(action: Action) {
 }
 
 function skip() {
+  if (batch!.asked !== batch!.state.at) return
+  batch!.asked = null
   clearTimeout(pending)
   worker?.terminate()
   worker = null
@@ -476,7 +480,7 @@ function finishBatch({ title, lede, unlocked: count }: Summary) {
       const li = row(file.name, state)
       const copy = run.copies[i]
       if (copy) li.append(saveOne(copy, choice.download))
-      if (state === 'skipped') li.append(rowAction('Try again', () => batchStep({ type: 'retry', index: i })))
+      if (state === 'skipped') li.append(rowAction('Try again', () => settled(run.state) && batchStep({ type: 'retry', index: i })))
       return li
     }),
   )
@@ -520,6 +524,7 @@ fileInput.addEventListener('change', () => {
 
 unlockForm.addEventListener('submit', (event) => {
   event.preventDefault()
+  if (batch && batch.asked !== batch.state.at) return
   submit.disabled = true
   if (batch) {
     wait(() => show('batch'))

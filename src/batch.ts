@@ -66,6 +66,9 @@ export function next(batch: Batch, event: Event, today = new Date()): { batch: B
   }
 }
 
+// Every file has reached an outcome or was skipped: only then may Try again reopen one.
+export const settled = (batch: Batch) => batch.rows.every((state) => !['waiting', 'unlocking', 'needs-password'].includes(state))
+
 function advance(batch: Batch): { batch: Batch; action: Action } {
   const index = batch.rows.indexOf('waiting')
   if (index < 0) return { batch, action: { type: 'done', summary: summary(batch.rows) } }

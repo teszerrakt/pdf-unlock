@@ -249,6 +249,42 @@ test.describe('batch', () => {
     await expect(rows(page)).toHaveText(['Unlocked', 'Unlocked'])
   })
 
+  test('a second Skip before the next prompt shows does not skip that file too', async ({ page }) => {
+    const pdf = await lockedPdf({ openPassword: 'secret' })
+    await pickFiles(page, [
+      ['march.pdf', pdf],
+      ['april.pdf', pdf],
+      ['may.pdf', pdf],
+    ])
+    await expect(page.locator('#counter')).toHaveText('1 of 3')
+    await page.evaluate(() => {
+      const cancel = document.getElementById('cancel')!
+      cancel.click()
+      cancel.click()
+    })
+    await expect(page.locator('#counter')).toHaveText('2 of 3')
+    await expect(page.locator('#unlock-name')).toHaveText('april.pdf')
+  })
+
+  test('a second Try again before the first reopens its file is ignored', async ({ page }) => {
+    const pdf = await lockedPdf({ openPassword: 'secret' })
+    await pickFiles(page, [
+      ['march.pdf', pdf],
+      ['plain.pdf', plainPdf()],
+      ['may.pdf', pdf],
+    ])
+    await page.getByRole('button', { name: 'Skip this file' }).click()
+    await expect(page.locator('#counter')).toHaveText('3 of 3')
+    await page.getByRole('button', { name: 'Skip this file' }).click()
+    await expect(rows(page)).toHaveText(['Skipped', 'Not locked', 'Skipped'])
+    await page.evaluate(() => {
+      for (const button of document.querySelectorAll<HTMLButtonElement>('#batch-done .row-action')) button.click()
+    })
+    await expect(page.locator('#counter')).toHaveText('1 of 3')
+    await page.getByRole('button', { name: 'Skip this file' }).click()
+    await expect(rows(page)).toHaveText(['Skipped', 'Not locked', 'Skipped'])
+  })
+
   test('a wrong password in a batch marks the prompt wrong, as for one file', async ({ page }) => {
     await pickFiles(page, [
       ['march.pdf', await lockedPdf({ openPassword: 'secret' })],
