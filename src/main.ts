@@ -155,7 +155,6 @@ function clear() {
 
 function askPassword(asked: Prompt) {
   prompt = asked
-  submit.disabled = false
   if (!asked.wrong) {
     password.value = ''
     setWrong(false)
@@ -341,6 +340,7 @@ const attempt = createAttempt(
     steps: setSteps,
     trying: setTrying,
     ask: askPassword,
+    ready: () => (submit.disabled = false),
     unlocked: showUnlocked,
     locked: showLocked,
     stop,

@@ -220,3 +220,18 @@ test('a batch whose password prompt is queued behind a row update: Skip this fil
   expect(called('rows').at(-1)!.args[0]).toEqual(['skipped', 'needs-password'])
   expect(sent).toEqual(['open', 'unlock', 'open'])
 })
+
+test('in a batch, a wrong password’s answer makes the password prompt ready again at once, before its prompt’s turn', () => {
+  const harness = setup()
+  const { attempt, answer, now, called } = harness
+  attempt.open([pdf('march.pdf'), pdf('april.pdf')])
+  answer({ type: 'needs-password' })
+  vi.runAllTimers()
+  attempt.submit('nope', true)
+  const submitted = now()
+  answer({ type: 'wrong-password' }, 10)
+  vi.runAllTimers()
+
+  expect(called('ready').filter(({ at }) => at > submitted).map(({ at }) => at)).toEqual([submitted + 10])
+  expect(called('ask').at(-1)!.at).toBeGreaterThan(submitted + 10)
+})

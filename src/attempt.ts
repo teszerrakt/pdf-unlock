@@ -44,6 +44,8 @@ export type Ui = {
   // The date-try counter, or none.
   trying(count: { n: number; of: number } | null): void
   ask(prompt: Prompt): void
+  // The worker answered, or the file was skipped: Unlock works again.
+  ready(): void
   unlocked(outcome: Unlocked, file: { name: string; size: number }): void
   locked(pdf: Uint8Array): void
   stop(reason: Stop): void
@@ -150,6 +152,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     if (response.type === 'restricted') return setSteps(2)
     if (response.type === 'trying') return ui.trying({ n: response.n, of: response.of })
     cancelPending()
+    ui.ready()
     if (response.type === 'needs-password' || response.type === 'wrong-password') return ask(response.type === 'wrong-password')
     stopWorker()
     switch (response.type) {
@@ -207,6 +210,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
   function batchAnswer(response: WorkerResponse) {
     if (response.type === 'restricted' || response.type === 'trying' || response.type === 'locked') return
     cancelPending()
+    ui.ready()
     if (response.type === 'needs-password' || response.type === 'wrong-password') return batchStep({ type: response.type })
     stopWorker()
     if (response.type === 'unlocked') ui.copy(run!.state.at, response)
@@ -248,6 +252,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     run!.asked = null
     cancelPending()
     stopWorker()
+    ui.ready()
     batchStep({ type: 'skip' })
   }
 
