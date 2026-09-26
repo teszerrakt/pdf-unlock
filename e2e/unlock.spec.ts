@@ -1,4 +1,4 @@
-import { brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf } from '../test/fixtures.ts'
+import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf } from '../test/fixtures.ts'
 import { downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test } from './test.ts'
 
 test.beforeEach(async ({ page }) => {
@@ -15,6 +15,15 @@ test('locked PDF with an open password: the right password gives an unlocked cop
   await expect(page.locator('#done-text')).toHaveText('This copy opens anywhere, no password needed.')
   const copy = await downloadUnlockedCopy(page)
   expect(copy.name).toBe('statement-unlocked.pdf')
+})
+
+test('bloated locked PDF: the Done text names the saving and the unlocked copy is smaller', async ({ page }) => {
+  const pdf = await bloatedPdf({ openPassword: 'secret' })
+  await pickFile(page, 'statement.pdf', pdf)
+  await enterPassword(page, 'secret')
+  await expect(screen(page, 'done')).toBeVisible()
+  await expect(page.locator('#done-text')).toHaveText(/^This copy opens anywhere, no password needed\. It’s also \d+ KB smaller\.$/)
+  expect((await downloadUnlockedCopy(page)).pdf.length).toBeLessThan(pdf.length)
 })
 
 test('wrong password: the prompt is marked wrong until the user types again', async ({ page }) => {

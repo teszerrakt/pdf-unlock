@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { brokenPdf, lockedPdf, notPdf, plainPdf, realWorld, restrictedPdf } from '../test/fixtures'
+import { bloatedPdf, bloatedPngPdf, brokenPdf, lockedPdf, notPdf, plainPdf, pngImagePdf, realWorld, restrictedPdf } from '../test/fixtures'
 import { createQpdf, isLocked, qpdf } from '../test/qpdf'
-import { open, unlock, type Outcome, type Prompt } from './unlock'
+import { open, unlock, type CreateQpdf, type Outcome, type Prompt } from './unlock'
 
 const openFile = (pdf: Uint8Array, onRestricted?: () => void) => open(createQpdf, pdf, onRestricted)
 const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, password)
@@ -12,6 +12,7 @@ async function expectUnlockedCopy(result: Outcome | Prompt, hadPassword: boolean
   const { pdf } = result as Extract<Outcome, { type: 'unlocked' }>
   expect(await isLocked(pdf)).toBe(false)
   expect((await qpdf(pdf, ['--check', '/in.pdf'])).code).toBe(0)
+  return pdf
 }
 
 describe('opening a file', () => {
@@ -84,6 +85,67 @@ describe('real-world locked PDFs', () => {
 
   it('unlocks the Quartz restricted PDF with no password prompt', async () => {
     await expectUnlockedCopy(await openFile(realWorld('quartz-restricted.pdf')), false)
+  })
+})
+
+describe('repacking the unlocked copy', () => {
+  it('makes the unlocked copy of a bloated PDF smaller than the input, and smaller than a plain decrypt', async () => {
+    const pdf = await bloatedPdf({ openPassword: 'secret' })
+    const copy = await expectUnlockedCopy(await tryPassword(pdf, 'secret'), true)
+    expect(copy.length).toBeLessThan(pdf.length)
+    // qpdf compresses uncompressed streams on any rewrite, so the repack has to beat that too.
+    const plain = await qpdf(pdf, ['--password=secret', '--decrypt', '/in.pdf', '/out.pdf'])
+    expect(copy.length).toBeLessThan(plain.output!.length)
+  })
+
+  it.each([
+    ['a PNG image', pngImagePdf],
+    ['uncompressed text beside a PNG image', bloatedPngPdf],
+  ])('never makes the unlocked copy bigger than a plain decrypt, for %s', async (_, fixture) => {
+    const pdf = await fixture({ openPassword: 'secret' })
+    const copy = await expectUnlockedCopy(await tryPassword(pdf, 'secret'), true)
+    const plain = await qpdf(pdf, ['--password=secret', '--decrypt', '/in.pdf', '/out.pdf'])
+    expect(copy.length).toBeLessThanOrEqual(plain.output!.length)
+  })
+
+  it('keeps the repacked copy when the plain decrypt after it runs out of memory', async () => {
+    let runs = 0
+    const outOfMemoryAfterOne: CreateQpdf = async () => {
+      if (++runs > 1) throw new RangeError('WebAssembly.Memory(): could not allocate memory')
+      return createQpdf()
+    }
+    await expectUnlockedCopy(await unlock(outOfMemoryAfterOne, await pngImagePdf({ openPassword: 'secret' }), 'secret'), true)
+    expect(runs).toBe(2)
+  })
+
+  it('still unlocks, with a plain decrypt, when the repack run aborts out of memory', async () => {
+    const abortingRepack: CreateQpdf = async () => {
+      const q = await createQpdf()
+      const callMain = q.callMain.bind(q)
+      q.callMain = (args) => {
+        if (args.includes('--object-streams=generate')) throw new WebAssembly.RuntimeError('Aborted(OOM)')
+        return callMain(args)
+      }
+      return q
+    }
+    await expectUnlockedCopy(await unlock(abortingRepack, await lockedPdf({ openPassword: 'secret' }), 'secret'), true)
+  })
+
+  it('still unlocks, with a plain decrypt, when the repack run fails', async () => {
+    const calls: string[][] = []
+    const failingRepack: CreateQpdf = async () => {
+      const q = await createQpdf()
+      const callMain = q.callMain.bind(q)
+      q.callMain = (args) => {
+        calls.push(args)
+        return args.includes('--object-streams=generate') ? 2 : callMain(args)
+      }
+      return q
+    }
+    const result = await unlock(failingRepack, await lockedPdf({ openPassword: 'secret' }), 'secret')
+    await expectUnlockedCopy(result, true)
+    expect(calls).toHaveLength(2)
+    expect(calls[1]).not.toEqual(expect.arrayContaining([expect.stringMatching(/object-streams|recompress-flate|compression-level/)]))
   })
 })
 
