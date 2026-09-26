@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { brokenPdf, lockedPdf, notPdf, plainPdf, realWorld, restrictedPdf } from '../test/fixtures'
 import { createQpdf, isLocked, qpdf } from '../test/qpdf'
-import { open, unlock, type Outcome, type Prompt } from './unlock'
+import { lock, open, unlock, type Outcome, type Prompt } from './unlock'
 
 const openFile = (pdf: Uint8Array, onRestricted?: () => void) => open(createQpdf, pdf, onRestricted)
 const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, password)
@@ -91,4 +91,34 @@ it('leaves console.error as it found it', async () => {
   const before = console.error
   await openFile(notPdf())
   expect(console.error).toBe(before)
+})
+
+describe('locking the unlocked copy with an own password', () => {
+  it('makes a locked copy that pauses at the password prompt', async () => {
+    const copy = await lock(createQpdf, plainPdf(), 'hunter2')
+    expect(await openFile(copy)).toEqual({ type: 'needs-password' })
+  })
+
+  it('unlocks the locked copy with the own password', async () => {
+    await expectUnlockedCopy(await tryPassword(await lock(createQpdf, plainPdf(), 'hunter2'), 'hunter2'), true)
+  })
+
+  it('uses AES-256 and adds no restrictions', async () => {
+    const copy = await lock(createQpdf, plainPdf(), 'hunter2')
+    const { stdout } = await qpdf(copy, ['--password=hunter2', '--show-encryption', '/in.pdf'])
+    expect(stdout).toContain('R = 6')
+    const permissions = stdout.filter((line) => /^(extract|print|modify)\b/.test(line))
+    expect(permissions).toHaveLength(9)
+    for (const line of permissions) expect(line).toMatch(/: allowed$/)
+  })
+
+  it('marks the password prompt wrong for anything but the own password', async () => {
+    expect(await tryPassword(await lock(createQpdf, plainPdf(), 'hunter2'), 'other')).toEqual({ type: 'wrong-password' })
+  })
+
+  it('refuses an empty own password without loading qpdf', async () => {
+    const create = vi.fn(createQpdf)
+    await expect(lock(create, plainPdf(), '')).rejects.toThrow()
+    expect(create).not.toHaveBeenCalled()
+  })
 })
