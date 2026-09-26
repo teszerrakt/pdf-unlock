@@ -1,0 +1,14 @@
+{
+  "projectId": "890aa9b2-3cad-42ee-9eba-b8acb037df49",
+  "shape": "package",
+  "pkg": "pdf-unlock",
+  "globalName": "Sphynx",
+  "buildCmd": "node .design-sync/build-css.mjs",
+  "cssEntry": ".design-sync/.cache/sphynx.css",
+  "extraFonts": [
+    "node_modules/@fontsource-variable/geist/wght.css",
+    "node_modules/@fontsource/instrument-serif/400.css",
+    "node_modules/@fontsource/instrument-serif/400-italic.css"
+  ],
+  "readmeHeader": ".design-sync/conventions.md"
+}
