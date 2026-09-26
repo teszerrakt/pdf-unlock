@@ -23,6 +23,7 @@
         <button id="back" type="button" class="round tap" aria-label="Back" data-reset hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
         </button>
+        <span id="counter" class="counter" hidden></span>
         <div class="bar-end">
           <button id="install" type="button" class="install tap" hidden>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
@@ -74,19 +75,19 @@
           </div>
 
           <label id="drop" class="drop rise d140">
-            <input id="file" type="file" accept="application/pdf,.pdf" />
+            <input id="file" type="file" accept="application/pdf,.pdf" multiple />
             <span class="drop-plus mob"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></span>
             <span class="drop-text mob">
-              <span class="drop-title">Choose a PDF</span>
-              <span class="drop-hint">or drop it here, or paste it</span>
+              <span class="drop-title">Choose PDFs</span>
+              <span class="drop-hint">or drop them here, or paste</span>
             </span>
             <svg class="drop-chevron mob" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
             <span class="cat drop-cat desk" aria-hidden="true"><span class="art cat-1"></span></span>
             <span class="button primary drop-button desk">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-              Choose a PDF
+              Choose PDFs
             </span>
-            <span class="drop-keys desk">or drop it here, or paste with <kbd id="mod-key">Ctrl</kbd><kbd>V</kbd></span>
+            <span class="drop-keys desk">or drop them here, or paste with <kbd id="mod-key">Ctrl</kbd><kbd>V</kbd></span>
           </label>
 
           <p class="note mob rise d220">Uses only the password you type. If it’s a date, it also tries other ways of writing it.</p>
@@ -119,6 +120,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.3h.01" /></svg>
               <span id="wrong-text">Wrong password. Try again.</span>
             </p>
+            <label id="remember-row" class="remember" hidden>
+              <input id="remember" type="checkbox" checked />
+              Use it for the rest of this batch
+            </label>
           </div>
           <div class="actions">
             <p class="assure">
@@ -129,7 +134,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10.5" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7" /></svg>
               Unlock
             </button>
-            <button type="button" class="link muted tap" data-reset>Cancel</button>
+            <button id="cancel" type="button" class="link muted tap" data-reset>Cancel</button>
           </div>
         </form>
 
@@ -177,6 +182,36 @@
             </a>
             <button type="button" class="link accent tap rise d400" data-reset>Unlock another</button>
             <p class="note">Nothing was uploaded. This copy is cleared when you leave.</p>
+          </div>
+        </section>
+
+        <section id="batch" class="screen busy batch" hidden>
+          <div class="cat busy-cat" aria-hidden="true"><span class="art cat-2 breathe"></span></div>
+          <div class="busy-title rise d80">
+            <h1 id="batch-title" class="display"></h1>
+            <p class="sub">One at a time, on this device.</p>
+          </div>
+          <ol id="batch-rows" class="rows rise d140" role="status"></ol>
+        </section>
+
+        <section id="batch-done" class="screen done batch-done" hidden>
+          <div class="cat done-cat" aria-hidden="true"><span class="art cat-3 pop"></span></div>
+          <div class="done-title">
+            <h1 id="batch-done-title" class="display rise d140"></h1>
+            <p id="batch-done-text" class="lede rise d190"></p>
+          </div>
+          <ol id="batch-done-rows" class="rows rise d240"></ol>
+          <div class="actions">
+            <button id="share-all" type="button" class="button primary tap rise d300" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" /></svg>
+              <span id="share-all-label">Share all</span>
+            </button>
+            <button id="save-all" type="button" class="button primary tap rise d350">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+              Save all
+            </button>
+            <button type="button" class="link accent tap rise d400" data-reset>Unlock more</button>
+            <p class="note">Nothing was uploaded. These copies are cleared when you leave.</p>
           </div>
         </section>
 

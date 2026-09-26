@@ -1,4 +1,7 @@
+import type { Page } from '@playwright/test'
 import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf } from '../test/fixtures.ts'
+import { isLocked } from '../test/qpdf.ts'
+import { readZip } from '../test/unzip.ts'
 import { downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test } from './test.ts'
 
 test.beforeEach(async ({ page }) => {
@@ -146,4 +149,171 @@ test.describe('abandoning an attempt', () => {
       await expect(page.locator('#file')).toHaveValue('')
     })
   }
+})
+
+test('the pick screen asks for PDFs, more than one allowed', async ({ page }) => {
+  await expect(page.locator('#drop .drop-title')).toHaveText('Choose PDFs')
+  await expect(page.locator('#drop .drop-hint')).toHaveText('or drop them here, or paste')
+  await expect(page.locator('#drop .drop-button')).toHaveText('Choose PDFs')
+  await expect(page.locator('#drop .drop-keys')).toHaveText(/^or drop them here, or paste with/)
+})
+
+test.describe('batch', () => {
+  async function pickFiles(page: Page, files: [string, Uint8Array][]) {
+    await page.locator('#file').setInputFiles(files.map(([name, bytes]) => ({ name, mimeType: 'application/pdf', buffer: Buffer.from(bytes) })))
+  }
+
+  const rows = (page: Page) => page.locator('#batch-done .row-state')
+
+  async function threeKinds(page: Page) {
+    await pickFiles(page, [
+      ['march.pdf', await lockedPdf({ openPassword: 'secret' })],
+      ['form.pdf', await restrictedPdf()],
+      ['plain.pdf', plainPdf()],
+    ])
+    await expect(screen(page, 'unlock')).toBeVisible()
+    await expect(page.locator('#counter')).toHaveText('1 of 3')
+    await expect(page.locator('#remember')).toBeChecked()
+    await enterPassword(page, 'secret')
+    await expect(page.locator('#batch-done')).toBeVisible()
+  }
+
+  test('a locked, a restricted and a not locked PDF: the open password typed once gives 2 of 3 unlocked', async ({ page }) => {
+    await threeKinds(page)
+    await expect(page.locator('#batch-done-title')).toHaveText('2 of 3 unlocked.')
+    await expect(page.locator('#batch-done-text')).toHaveText('One file had no password to remove.')
+    await expect(rows(page)).toHaveText(['Unlocked', 'Unlocked', 'Not locked'])
+    await expect(page.locator('#batch-done .note')).toHaveText('Nothing was uploaded. These copies are cleared when you leave.')
+    await expect(page.getByRole('button', { name: 'Unlock more' })).toBeVisible()
+  })
+
+  test('Save all downloads unlocked.zip, and no unlocked copy in it is locked', async ({ page }) => {
+    await threeKinds(page)
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Save all' }).click()])
+    expect(download.suggestedFilename()).toBe('unlocked.zip')
+    const chunks: Buffer[] = []
+    for await (const chunk of await download.createReadStream()) chunks.push(chunk as Buffer)
+    const entries = readZip(new Uint8Array(Buffer.concat(chunks)))
+    expect(entries.map((entry) => entry.name)).toEqual(['march-unlocked.pdf', 'form-unlocked.pdf'])
+    for (const entry of entries) expect(await isLocked(entry.bytes), `${entry.name} still has a lock`).toBe(false)
+  })
+
+  test('one unlocked copy saves alone from its row', async ({ page }) => {
+    await threeKinds(page)
+    const row = page.locator('#batch-done li').nth(1)
+    const [download] = await Promise.all([page.waitForEvent('download'), row.getByRole('link', { name: 'Save' }).click()])
+    expect(download.suggestedFilename()).toBe('form-unlocked.pdf')
+  })
+
+  test('two locked PDFs with the same open password: typed once with the checkbox on, no second prompt', async ({ page }) => {
+    const pdf = await lockedPdf({ openPassword: 'secret' })
+    await pickFiles(page, [
+      ['march.pdf', pdf],
+      ['april.pdf', pdf],
+    ])
+    await enterPassword(page, 'secret')
+    await expect(page.locator('#batch-done')).toBeVisible()
+    await expect(rows(page)).toHaveText(['Unlocked', 'Unlocked'])
+    await expect(page.locator('#batch-done-text')).toHaveText('Every copy opens anywhere, no password needed.')
+  })
+
+  test('two locked PDFs with the same open password: the checkbox off brings a second prompt, 2 of 2', async ({ page }) => {
+    const pdf = await lockedPdf({ openPassword: 'secret' })
+    await pickFiles(page, [
+      ['march.pdf', pdf],
+      ['april.pdf', pdf],
+    ])
+    await page.getByLabel('Use it for the rest of this batch').uncheck()
+    await enterPassword(page, 'secret')
+    await expect(page.locator('#counter')).toHaveText('2 of 2')
+    await expect(page.locator('#unlock-name')).toHaveText('april.pdf')
+    await expect(page.locator('#password')).toHaveValue('')
+    await expect(page.locator('#wrong')).toBeHidden()
+  })
+
+  test('Skip this file: the batch goes on, and the skipped row offers Try again', async ({ page }) => {
+    await pickFiles(page, [
+      ['march.pdf', await lockedPdf({ openPassword: 'secret' })],
+      ['form.pdf', await restrictedPdf()],
+    ])
+    await page.getByRole('button', { name: 'Skip this file' }).click()
+    await expect(page.locator('#batch-done')).toBeVisible()
+    await expect(page.locator('#batch-done-title')).toHaveText('1 of 2 unlocked.')
+    await expect(page.locator('#batch-done-text')).toHaveText('One was skipped.')
+    await expect(rows(page)).toHaveText(['Skipped', 'Unlocked'])
+
+    await page.getByRole('button', { name: 'Try again' }).click()
+    await expect(page.locator('#counter')).toHaveText('1 of 2')
+    await enterPassword(page, 'secret')
+    await expect(page.locator('#batch-done-title')).toHaveText('2 of 2 unlocked.')
+    await expect(rows(page)).toHaveText(['Unlocked', 'Unlocked'])
+  })
+
+  test('a wrong password in a batch marks the prompt wrong, as for one file', async ({ page }) => {
+    await pickFiles(page, [
+      ['march.pdf', await lockedPdf({ openPassword: 'secret' })],
+      ['plain.pdf', plainPdf()],
+    ])
+    await enterPassword(page, 'nope')
+    await expect(page.locator('#wrong')).toBeVisible()
+    await expect(page.locator('#counter')).toHaveText('1 of 2')
+    await enterPassword(page, 'secret')
+    await expect(rows(page)).toHaveText(['Unlocked', 'Not locked'])
+  })
+
+  test('a single file picked never shows the batch and reaches Done as before', async ({ page }) => {
+    await page.evaluate(() => {
+      const batch = document.getElementById('batch')!
+      new MutationObserver(() => batch.hidden || document.body.setAttribute('data-batch-shown', '')).observe(batch, { attributes: true })
+    })
+    await pickFiles(page, [['form.pdf', await restrictedPdf()]])
+    await expect(screen(page, 'done')).toBeVisible()
+    await expect(page.locator('body')).not.toHaveAttribute('data-batch-shown')
+  })
+
+  test('dropping two PDFs and a text file starts a batch of the two PDFs', async ({ page }) => {
+    const dataTransfer = await page.evaluateHandle((pdf) => {
+      const transfer = new DataTransfer()
+      transfer.items.add(new File([new Uint8Array(pdf)], 'a.pdf', { type: 'application/pdf' }))
+      transfer.items.add(new File(['notes'], 'notes.txt', { type: 'text/plain' }))
+      transfer.items.add(new File([new Uint8Array(pdf)], 'b.pdf', { type: 'application/pdf' }))
+      return transfer
+    }, [...plainPdf()])
+    await page.dispatchEvent('#drop', 'drop', { dataTransfer })
+    await expect(page.locator('#batch-done-title')).toHaveText('0 of 2 unlocked.')
+    await expect(page.locator('#batch-done .row-name')).toHaveText(['a.pdf', 'b.pdf'])
+  })
+
+  test('pasting two PDFs starts a batch', async ({ page, browserName }) => {
+    test.skip(browserName === 'webkit', 'WebKit ignores clipboardData on a synthetic paste event')
+    await page.evaluate((pdf) => {
+      const clipboardData = new DataTransfer()
+      for (const name of ['a.pdf', 'b.pdf']) clipboardData.items.add(new File([new Uint8Array(pdf)], name, { type: 'application/pdf' }))
+      document.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }))
+    }, [...(await restrictedPdf())])
+    await expect(page.locator('#batch-done-title')).toHaveText('2 of 2 unlocked.')
+  })
+
+  test.describe('with motion on', () => {
+    test.use({ reducedMotion: 'no-preference' })
+
+    test('the rows change at least 200 ms apart while the batch works', async ({ page }) => {
+      await page.evaluate(() => {
+        const log: number[] = ((window as unknown as { rowLog: number[] }).rowLog = [])
+        const rows = document.getElementById('batch-rows')!
+        new MutationObserver(() => log.push(performance.now())).observe(rows, { subtree: true, attributeFilter: ['data-state'] })
+      })
+      await pickFiles(page, [
+        ['a.pdf', plainPdf()],
+        ['b.pdf', plainPdf()],
+        ['c.pdf', plainPdf()],
+      ])
+      await expect(page.locator('#batch-done')).toBeVisible()
+      const log = await page.evaluate(() => (window as unknown as { rowLog: number[] }).rowLog)
+      const gaps = log.slice(1).map((at, i) => at - log[i])
+      // One change per file reaching its outcome: the next file's row starts in the same change.
+      expect(log.length, 'row changes').toBe(3)
+      expect(Math.min(...gaps), 'ms between two row changes').toBeGreaterThanOrEqual(190)
+    })
+  })
 })

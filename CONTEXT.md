@@ -40,6 +40,14 @@ _Avoid_: Invalid password, failed attempt
 One way of writing a typed date as digits (day-month-year, year-month-day, month-day-year, each with a long or short year), tried after the exact text. The app names the form that worked.
 _Avoid_: Variant, permutation, guess
 
+**Batch**:
+Two or more attempts queued from one pick, drop or paste, run one at a time. It ends with a summary, never a single outcome.
+_Avoid_: Queue, multi-file, bulk
+
+**Skipped**:
+How one attempt in a batch ends when the user cancels its password prompt. The batch continues.
+_Avoid_: Cancelled, failed
+
 **Abandoned**:
 How an attempt ends without an outcome: the user pressed Cancel or Back, or picked another file.
 _Avoid_: Cancelled, reset
