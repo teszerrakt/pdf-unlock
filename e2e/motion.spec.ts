@@ -223,3 +223,25 @@ test('after a date form worked, adding a password shows the Locking steps with n
   await expect(page.locator('#trying')).toBeHidden()
   await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
 })
+
+test('adding an own password on a slow device ticks the Locking steps at least 350 ms apart', async ({ page }) => {
+  await slowWorker(page, 0)
+  await page.goto('/')
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+  await enterPassword(page, 'secret')
+  await expect(screen(page, 'done')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Add password', exact: true }).click()
+  await page.getByLabel('New password', { exact: true }).fill('hunter2')
+  const steps = await recordSteps(page)
+  await page.evaluate(() => window.holdWorker())
+  await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
+
+  const { log, first } = await steps()
+  const shown = first(2, 'is-active')
+  const locked = first(3, 'is-done')
+  expect(shown, 'the Locking screen never showed').toBeGreaterThanOrEqual(0)
+  expect(locked, 'step 3 never ticked after the Locking screen showed').toBeGreaterThan(shown)
+  expect(log[locked].at - log[shown].at, 'ms between the Locking screen showing and its next tick').toBeGreaterThanOrEqual(350)
+})
