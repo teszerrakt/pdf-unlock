@@ -141,3 +141,22 @@ test('a bloated locked PDF ticks steps 1, 2 and 3 in order, the second at least 
   expect([...ticks].sort((a, b) => a - b)).toEqual(ticks)
   expect(log[ticks[1]].at - log[ticks[0]].at, 'ms between the first tick and the second').toBeGreaterThanOrEqual(300)
 })
+
+test('dropping a file that is not a PDF while an answer waits its turn keeps the stop screen', async ({ page }) => {
+  await slowWorker(page, 5)
+  await page.goto('/')
+  await page.evaluate(() => window.holdWorker())
+  await pickFile(page, 'form.pdf', await restrictedPdf())
+  await expect(screen(page, 'busy')).toBeVisible()
+  const dataTransfer = await page.evaluateHandle(() => {
+    const transfer = new DataTransfer()
+    transfer.items.add(new File(['plain text'], 'notes.txt', { type: 'text/plain' }))
+    return transfer
+  })
+  await page.dispatchEvent('#drop', 'drop', { dataTransfer })
+  await expect(page.locator('#stop-title')).toHaveText('That’s not a PDF.')
+  // The queued answers would run within 700 ms of the screen showing, then hold the last tick 500 ms.
+  await page.waitForTimeout(1500)
+  await expect(screen(page, 'stop')).toBeVisible()
+  await expect(screen(page, 'done')).toBeHidden()
+})

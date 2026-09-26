@@ -40,3 +40,58 @@ test('a floor of 0, as under reduced motion, runs every update at once', () => {
     [2, 0],
   ])
 })
+
+// Records each named update's run time, relative to when the recorder was made.
+function recorder() {
+  const start = Date.now()
+  const ran: [string, number][] = []
+  return { ran, log: (name: string) => () => void ran.push([name, Date.now() - start]) }
+}
+
+test('an update pushed from inside a running update waits its floor and runs once', () => {
+  const pacer = createPacer(350)
+  const { ran, log } = recorder()
+  pacer.push(() => {
+    log('f')()
+    pacer.push(log('g'))
+  })
+  vi.runAllTimers()
+  expect(ran).toEqual([
+    ['f', 0],
+    ['g', 350],
+  ])
+})
+
+test('an update pushed from inside a queued update keeps its place and its floor', () => {
+  const pacer = createPacer(350)
+  const { ran, log } = recorder()
+  pacer.push(log('a'))
+  pacer.push(() => {
+    log('b')()
+    pacer.push(log('d'))
+  })
+  pacer.push(log('c'))
+  vi.runAllTimers()
+  expect(ran).toEqual([
+    ['a', 0],
+    ['b', 350],
+    ['c', 700],
+    ['d', 1050],
+  ])
+})
+
+test('an update that throws does not stall the ones queued behind it', () => {
+  const pacer = createPacer(350)
+  const { ran, log } = recorder()
+  pacer.push(log('a'))
+  pacer.push(() => {
+    throw new Error('boom')
+  })
+  pacer.push(log('c'))
+  expect(() => vi.runAllTimers()).toThrow('boom')
+  vi.runAllTimers()
+  expect(ran).toEqual([
+    ['a', 0],
+    ['c', 700],
+  ])
+})

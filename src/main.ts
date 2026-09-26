@@ -155,10 +155,10 @@ function openFile(file: File) {
 }
 
 // Answers before the Unlocking screen shows are not paced, so quick work never shows it. A queued
-// answer from an abandoned attempt is dropped.
+// answer is dropped once its attempt is abandoned or another screen, such as a stop, has replaced it.
 function receive(attempt: Worker, response: WorkerResponse) {
   if (current !== 'busy') return handle(response)
-  pace.push(() => worker === attempt && handle(response))
+  pace.push(() => worker === attempt && current === 'busy' && handle(response))
 }
 
 function handle(response: WorkerResponse) {

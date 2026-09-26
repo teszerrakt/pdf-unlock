@@ -10,34 +10,36 @@ export function createPacer(floor: number, cap = Infinity, { now, later }: Clock
   const queue: (() => void)[] = []
   let last = -Infinity
   let added = 0
-  let waiting = false
-
-  function runNext() {
-    last = now()
-    queue.shift()!()
-  }
+  // Set while an update runs or a timer is pending, so a push, even one from inside an update, only queues.
+  let draining = false
 
   function drain() {
+    draining = true
     while (queue.length) {
       const wait = Math.min(floor - (now() - last), cap - added)
       if (wait > 0) {
         added += wait
-        waiting = true
-        later(() => {
-          waiting = false
-          runNext()
-          drain()
-        }, wait)
+        later(drain, wait)
         return
       }
-      runNext()
+      last = now()
+      const update = queue.shift()!
+      try {
+        update()
+      } catch (error) {
+        // Rethrown on its own tick so the updates queued behind it still run.
+        later(() => {
+          throw error
+        }, 0)
+      }
     }
+    draining = false
   }
 
   return {
     push(fn: () => void) {
       queue.push(fn)
-      if (!waiting) drain()
+      if (!draining) drain()
     },
   }
 }
