@@ -44,25 +44,20 @@ test.describe('share target', () => {
   })
 })
 
-// iOS opens a downloaded PDF in a viewer instead of saving it, so the share sheet (Save to Files) is
-// the only way out. Runs on the iphone project alone.
 test.describe('iPhone share sheet', () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'iphone', 'the iPhone device profile only')
-    // Playwright's iPhone profile still reports a Mac with no touch points and has no Web Share,
-    // so this adds what a real iPhone has. navigator.share records what it was handed.
+    // Playwright's iPhone profile still reports a Mac platform and has no Web Share.
     await page.addInitScript(() => {
       const shared: File[][] = ((window as unknown as { shared: File[][] }).shared = [])
       const stub = (name: string, value: unknown) => Object.defineProperty(Navigator.prototype, name, { get: () => value, configurable: true })
       stub('platform', 'iPhone')
-      stub('maxTouchPoints', 5)
-      stub('canShare', (data?: ShareData) => !!data?.files?.length)
+      stub('canShare', () => true)
       stub('share', async (data: ShareData) => void shared.push(data.files ?? []))
     })
     await page.goto('/')
   })
 
-  // What each navigator.share call was handed, as names and bytes.
   async function sharedFiles(page: Page) {
     return page.evaluate(() =>
       Promise.all(

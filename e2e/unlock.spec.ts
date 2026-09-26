@@ -4,11 +4,16 @@ import { isLocked, qpdf } from '../test/qpdf.ts'
 import { readZip } from '../test/unzip.ts'
 import { downloadCopy, downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test, waitForServiceWorker } from './test.ts'
 
-// A test that navigates again first waits for this visit's service worker: leaving while sw.js still
-// loads makes WebKit reject the registration, which the privacy guard reports as an uncaught error.
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
+
+// Loads the app again, for a test that sets something up before load. Leaving while sw.js still loads
+// makes WebKit reject the registration, which the privacy guard reports as an uncaught error.
+async function revisit(page: Page) {
+  await waitForServiceWorker(page)
+  await page.goto('/')
+}
 
 test('locked PDF with an open password: the right password gives an unlocked copy', async ({ page }) => {
   await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
@@ -52,8 +57,7 @@ test.describe('date forms', () => {
   // Every candidate is checked against today; 2026-09-26 keeps `900805` and `060890` in the past.
   test.beforeEach(async ({ page }) => {
     await page.clock.setFixedTime(new Date(2026, 8, 26, 12))
-    await waitForServiceWorker(page)
-    await page.goto('/')
+    await revisit(page)
   })
 
   test('a date typed in another form: the Done text names the date form that worked', async ({ page }) => {
@@ -311,8 +315,7 @@ test.describe('batch', () => {
         }
       }
     })
-    await waitForServiceWorker(page)
-    await page.goto('/')
+    await revisit(page)
     const pdf = await lockedPdf({ openPassword: 'secret' })
     await pickFiles(page, [
       ['march.pdf', pdf],

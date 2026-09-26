@@ -22,7 +22,7 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     // The closest stand-in for iOS Safari that runs in CI. It is not a real iPhone.
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
-    // iPhone's Save or share path only: a download there opens a viewer instead of saving.
+    // iOS opens a downloaded PDF in a viewer instead of saving it, so the iPhone saves through the share sheet.
     { name: 'iphone', use: { ...devices['iPhone 15'] }, testMatch: 'share.spec.ts' },
   ],
   webServer: {
