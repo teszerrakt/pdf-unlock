@@ -40,8 +40,19 @@ npm install
 npm run dev
 ```
 
-`npm run build` type-checks and writes `dist/`. `npm run preview` serves it; the service worker
-only runs in the built app.
+`npm run build` type-checks and writes `dist/`. `npm run preview` serves it with the production
+headers from `vercel.json`; the service worker only runs in the built app.
+
+## Test
+
+```sh
+npx playwright install chromium webkit   # once
+npm run check                            # typecheck, unit (Vitest) and e2e (Playwright)
+```
+
+Unit tests run the real qpdf-wasm in Node against fixture PDFs. E2E runs the built app in Chromium
+and WebKit, and fails if the page sends a request anywhere but its own origin or breaks the CSP.
+CI runs the same on every pull request. See `CLAUDE.md` for the rules.
 
 ## Deploy
 
@@ -63,3 +74,7 @@ The cat drawings and the app icon come from the ink originals in `art/` (not com
 `public/`. Run `npm i --no-save sharp && node scripts/art.mjs`.
 
 Keep the originals out of `public/`: everything there is shipped and precached.
+
+## License
+
+The code is MIT (see `LICENSE`). The cat drawings and app icons are not: all rights reserved.
