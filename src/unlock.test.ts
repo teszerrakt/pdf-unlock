@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { brokenPdf, lockedPdf, notPdf, plainPdf, realWorld, restrictedPdf } from '../test/fixtures'
 import { createQpdf, isLocked, qpdf } from '../test/qpdf'
-import { lock, open, unlock, type LockResult, type Outcome, type Prompt } from './unlock'
+import { lock, open, unlock, type Outcome, type Prompt } from './unlock'
 
 const openFile = (pdf: Uint8Array, onRestricted?: () => void) => open(createQpdf, pdf, onRestricted)
 const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, password)
@@ -94,11 +94,7 @@ it('leaves console.error as it found it', async () => {
 })
 
 describe('locking the unlocked copy with an own password', () => {
-  const lockedCopy = async () => {
-    const result = await lock(createQpdf, plainPdf(), 'hunter2')
-    expect(result.type).toBe('locked')
-    return (result as Extract<LockResult, { type: 'locked' }>).pdf
-  }
+  const lockedCopy = () => lock(createQpdf, plainPdf(), 'hunter2')
 
   it('makes a locked copy that pauses at the password prompt', async () => {
     expect(await openFile(await lockedCopy())).toEqual({ type: 'needs-password' })
@@ -124,12 +120,5 @@ describe('locking the unlocked copy with an own password', () => {
     const create = vi.fn(createQpdf)
     await expect(lock(create, plainPdf(), '')).rejects.toThrow()
     expect(create).not.toHaveBeenCalled()
-  })
-
-  it('ends unreadable when qpdf cannot read the copy', async () => {
-    expect(await lock(createQpdf, notPdf(), 'hunter2')).toEqual({
-      type: 'unreadable',
-      message: expect.stringMatching(/^This file could not be read as a PDF \(.+\)\.$/),
-    })
   })
 })

@@ -155,10 +155,8 @@ function send(request: WorkerRequest) {
 function startWorker() {
   worker = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent<WorkerResponse>) => handle(event.data)
-  worker.onerror = () => fail(`${doing()} failed. Reload the page and try again.`)
+  worker.onerror = () => fail('Unlocking failed. Reload the page and try again.')
 }
-
-const doing = () => (locking ? 'Locking' : 'Unlocking')
 
 function openFile(file: File) {
   clear()
@@ -186,9 +184,6 @@ function handle(response: WorkerResponse) {
       return finish(response.pdf, response.hadPassword)
     case 'locked':
       return finishLock(response.pdf)
-    case 'crashed':
-      worker?.terminate()
-      return fail(`${doing()} failed. The file may be too large for this device.`)
     case 'unreadable':
       worker?.terminate()
       return fail(response.message)
