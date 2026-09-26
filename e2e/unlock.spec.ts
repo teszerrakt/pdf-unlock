@@ -1,5 +1,6 @@
 import { brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf } from '../test/fixtures.ts'
-import { downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test } from './test.ts'
+import { isLocked, qpdf } from '../test/qpdf.ts'
+import { downloadCopy, downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test } from './test.ts'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -102,4 +103,58 @@ test.describe('abandoning an attempt', () => {
       await expect(page.locator('#file')).toHaveValue('')
     })
   }
+})
+
+test.describe('own password', () => {
+  test.beforeEach(async ({ page }) => {
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+    await enterPassword(page, 'secret')
+    await expect(screen(page, 'done')).toBeVisible()
+    await page.getByRole('button', { name: 'Add password', exact: true }).click()
+  })
+
+  const ownPassword = (page: import('@playwright/test').Page) => page.getByLabel('New password', { exact: true })
+
+  test('Add password on the unlocked copy opens the set screen, Lock it waits for a password', async ({ page }) => {
+    await expect(screen(page, 'relock')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Set a new password.' })).toBeVisible()
+    await expect(ownPassword(page)).toHaveAttribute('type', 'text')
+    const lockIt = page.getByRole('button', { name: 'Lock it', exact: true })
+    await expect(lockIt).toBeDisabled()
+    await ownPassword(page).fill('h')
+    await expect(lockIt).toBeEnabled()
+  })
+
+  test('Lock it gives a locked copy that opens with the own password', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+
+    await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
+    await expect(page.locator('#done-text')).toHaveText('Opens only with the password you set. Printing and copying stay allowed.')
+    await expect(page.locator('#done-name')).toHaveText('statement-locked.pdf')
+    await expect(page.locator('#done-info')).toHaveText(/^\d+ KB · Your password$/)
+    const copy = await downloadCopy(page)
+    expect(copy.name).toBe('statement-locked.pdf')
+    expect(await isLocked(copy.pdf), 'the locked copy has no lock').toBe(true)
+    expect((await qpdf(copy.pdf, ['--password=hunter2', '--check', '/in.pdf'])).code).toBe(0)
+    expect((await qpdf(copy.pdf, ['--password=other', '--check', '/in.pdf'])).code).not.toBe(0)
+  })
+
+  for (const control of ['Cancel', 'Back']) {
+    test(`${control} on the set screen returns to the unlocked copy and empties the field`, async ({ page }) => {
+      await ownPassword(page).fill('half-typed')
+      await page.getByRole('button', { name: control, exact: true }).click()
+
+      await expect(page.getByRole('heading', { name: 'Unlocked.' })).toBeVisible()
+      expect((await downloadUnlockedCopy(page)).name).toBe('statement-unlocked.pdf')
+      await page.getByRole('button', { name: 'Add password', exact: true }).click()
+      await expect(ownPassword(page)).toHaveValue('')
+    })
+  }
+
+  test('the eye toggle hides the own password', async ({ page }) => {
+    await page.getByRole('button', { name: 'Hide password', exact: true }).click()
+    await expect(ownPassword(page)).toHaveAttribute('type', 'password')
+    await expect(page.locator('#new-reveal')).toHaveAttribute('aria-label', 'Show password')
+  })
 })

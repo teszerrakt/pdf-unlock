@@ -31,7 +31,9 @@ export async function qpdf(input: Uint8Array, args: string[]) {
   return { code, stdout, output }
 }
 
-// qpdf --is-encrypted: 0 when locked, 2 when not.
+// Locked unless qpdf reads the file with no password and says so. Not --is-encrypted: this build
+// exits 2 on a PDF with an open password, the same as on one with no lock at all.
 export async function isLocked(pdf: Uint8Array) {
-  return (await qpdf(pdf, ['--is-encrypted', '/in.pdf'])).code === 0
+  const { code, stdout } = await qpdf(pdf, ['--show-encryption', '/in.pdf'])
+  return !(code === 0 && stdout.includes('File is not encrypted'))
 }

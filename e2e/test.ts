@@ -34,7 +34,7 @@ export const test = base.extend<{ privacyGuard: void }>({
   ],
 })
 
-export const screen = (page: Page, id: 'pick' | 'unlock' | 'busy' | 'done' | 'stop') => page.locator(`#${id}`)
+export const screen = (page: Page, id: 'pick' | 'unlock' | 'busy' | 'done' | 'stop' | 'relock') => page.locator(`#${id}`)
 
 export async function pickFile(page: Page, name: string, bytes: Uint8Array) {
   await page.locator('#file').setInputFiles({ name, mimeType: 'application/pdf', buffer: Buffer.from(bytes) })
@@ -45,15 +45,20 @@ export async function enterPassword(page: Page, password: string) {
   await page.getByRole('button', { name: 'Unlock', exact: true }).click()
 }
 
-// Downloads the unlocked copy and checks it opens without a password.
-export async function downloadUnlockedCopy(page: Page) {
+// Downloads whichever copy the Save to device button offers.
+export async function downloadCopy(page: Page) {
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#download').click()])
   const stream = await download.createReadStream()
   const chunks: Buffer[] = []
   for await (const chunk of stream) chunks.push(chunk as Buffer)
-  const pdf = new Uint8Array(Buffer.concat(chunks))
-  expect(await isLocked(pdf), 'the unlocked copy still has a lock').toBe(false)
-  return { name: download.suggestedFilename(), pdf }
+  return { name: download.suggestedFilename(), pdf: new Uint8Array(Buffer.concat(chunks)) }
+}
+
+// Downloads the unlocked copy and checks it opens without a password.
+export async function downloadUnlockedCopy(page: Page) {
+  const copy = await downloadCopy(page)
+  expect(await isLocked(copy.pdf), 'the unlocked copy still has a lock').toBe(false)
+  return copy
 }
 
 // Resolves once the service worker controls the page: offline and the share target need it.

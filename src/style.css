@@ -606,6 +606,32 @@ kbd {
   color: var(--muted);
 }
 
+/* A secondary action on the copy itself, so the action stack stays at three. */
+.card-action {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.card-action:hover {
+  border-color: var(--accent);
+}
+
+.card-action svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+}
+
 /* Password */
 
 .unlock-cat {
@@ -715,6 +741,12 @@ kbd {
   width: 16px;
   height: 16px;
   stroke-width: 2;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .err {
