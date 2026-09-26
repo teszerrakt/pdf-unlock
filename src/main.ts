@@ -7,6 +7,7 @@ import { SHARE_ACTION, SHARE_CACHE, SHARED_AT_HEADER, SHARED_FILE, SHARED_NAME_H
 import { formatSize, isPdf, unlockedName } from './file'
 import { browserName, isIos as detectIos, modifierKey, type Brand } from './platform'
 import { doneText, saveChoice } from './save'
+import { createPacer } from './pace'
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 
@@ -37,6 +38,13 @@ const isIos = detectIos(platform, navigator.maxTouchPoints)
 
 // Work that ends within this many ms skips the Unlocking screen, so a quick answer does not flash it.
 const PATIENCE = 300
+// Once the Unlocking screen shows, its steps tick at least this many ms apart. Batch rows change at
+// least ROW_FLOOR apart, adding at most ROW_CAP of wait per batch; date tries count TRY_FLOOR apart.
+// Every floor is 0 under reduced motion. Exported so the ones no screen uses yet still typecheck.
+export const STEP_FLOOR = 350
+export const ROW_FLOOR = 200
+export const ROW_CAP = 2000
+export const TRY_FLOOR = 150
 
 let worker: Worker | null = null
 let fileName = ''
@@ -48,6 +56,7 @@ let step = 1
 let isWrong = false
 let pending = 0
 let toastTimer = 0
+let pace = createPacer(0)
 
 function show(view: View, then?: () => void) {
   if (view === current) return then?.()
@@ -87,6 +96,8 @@ function showBusy() {
   byId('busy-name').textContent = fileName
   setSteps(step)
   show('busy')
+  // Appearing is the screen's first tick, so the next update waits a step floor after it.
+  pace.push(() => {})
 }
 
 function wait() {
@@ -134,11 +145,20 @@ function openFile(file: File) {
   fileName = file.name || 'document.pdf'
   fileSize = file.size
   step = 1
-  worker = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
-  worker.onmessage = (event: MessageEvent<WorkerResponse>) => handle(event.data)
+  pace = createPacer(reducedMotion.matches ? 0 : STEP_FLOOR)
+  const attempt = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
+  worker = attempt
+  worker.onmessage = (event: MessageEvent<WorkerResponse>) => receive(attempt, event.data)
   worker.onerror = () => fail('Unlocking failed. Reload the page and try again.')
   wait()
   send({ type: 'open', file })
+}
+
+// An answer that lands before the Unlocking screen shows runs at once, so quick work never shows it.
+// Once it shows, answers queue and tick a step floor apart; one left over from an abandoned attempt is dropped.
+function receive(attempt: Worker, response: WorkerResponse) {
+  if (current !== 'busy') return handle(response)
+  pace.push(() => worker === attempt && handle(response))
 }
 
 function handle(response: WorkerResponse) {

@@ -1,9 +1,81 @@
 // The other specs run with reduced motion. This one keeps view transitions and the busy screen's
 // step ticks on, so the animated path still reaches the right screens.
-import { lockedPdf, restrictedPdf } from '../test/fixtures.ts'
+import type { Page } from '@playwright/test'
+import { bloatedPdf, lockedPdf, restrictedPdf } from '../test/fixtures.ts'
 import { enterPassword, expect, pickFile, screen, test } from './test.ts'
 
 test.use({ reducedMotion: 'no-preference' })
+
+type Tick = { step: number; classes: string[]; at: number }
+declare global {
+  interface Window {
+    holdWorker(): void
+    stepLog: Tick[]
+    busyShown: boolean
+  }
+}
+
+// Qpdf answers these fixtures in tens of ms, well inside the patience, so the Unlocking screen would
+// never show. Once `holdWorker()` is called, the worker's answers wait until it does, then reach the
+// page `gap` ms apart: a device slow enough to show the screen, with the pacing left to the page.
+async function slowWorker(page: Page, gap: number) {
+  await page.addInitScript((gap) => {
+    const held: (() => void)[] = []
+    let holding = false
+    window.holdWorker = () => (holding = true)
+    document.addEventListener('DOMContentLoaded', () => {
+      const busy = document.getElementById('busy')!
+      new MutationObserver(() => {
+        if (!holding || busy.hidden) return
+        holding = false
+        held.splice(0).forEach((deliver, i) => setTimeout(deliver, i * gap))
+      }).observe(busy, { attributes: true, attributeFilter: ['hidden'] })
+    })
+    const Native = window.Worker
+    window.Worker = class extends Native {
+      get onmessage() {
+        return super.onmessage
+      }
+      set onmessage(handler) {
+        super.onmessage = (event) => (holding ? held.push(() => handler?.call(this, event)) : handler?.call(this, event))
+      }
+    }
+  }, gap)
+}
+
+// Logs every class change on the busy steps, in order, with the time it happened.
+async function recordSteps(page: Page) {
+  await page.evaluate(() => {
+    const log: Tick[] = (window.stepLog = [])
+    const steps = [...document.querySelectorAll('#steps li')]
+    // A batch of records arrives after its changes, so each one's classes are the next one's old value.
+    new MutationObserver((records) => {
+      const at = performance.now()
+      records.forEach(({ target }, i) => {
+        const next = records.slice(i + 1).find((r) => r.target === target)
+        const classes = next ? (next.oldValue ?? '') : (target as Element).className
+        log.push({ step: steps.indexOf(target as Element) + 1, classes: classes.split(' ').filter(Boolean), at })
+      })
+    }).observe(document.getElementById('steps')!, { subtree: true, attributeOldValue: true, attributeFilter: ['class'] })
+  })
+  return async () => {
+    const log = await page.evaluate(() => window.stepLog)
+    const first = (step: number, className: string) => log.findIndex((t) => t.step === step && t.classes.includes(className))
+    return { log, first }
+  }
+}
+
+// Notes whether the Unlocking screen is ever made visible from here on.
+async function watchBusy(page: Page) {
+  await page.evaluate(() => {
+    const busy = document.getElementById('busy')!
+    window.busyShown = false
+    new MutationObserver(() => {
+      if (!busy.hidden) window.busyShown = true
+    }).observe(busy, { attributes: true, attributeFilter: ['hidden'] })
+  })
+  return () => page.evaluate(() => window.busyShown)
+}
 
 test('with motion on, an attempt still reaches the unlocked copy', async ({ page }) => {
   await page.goto('/')
@@ -19,4 +91,47 @@ test('with motion on, an attempt still reaches the unlocked copy', async ({ page
   await expect(screen(page, 'pick')).toBeVisible()
   await pickFile(page, 'form.pdf', await restrictedPdf())
   await expect(screen(page, 'done')).toBeVisible()
+})
+
+test('restricted and unlocked arriving 5 ms apart show step 2 as active before step 3 is done', async ({ page }) => {
+  await slowWorker(page, 5)
+  await page.goto('/')
+  const steps = await recordSteps(page)
+  await page.evaluate(() => window.holdWorker())
+  await pickFile(page, 'form.pdf', await restrictedPdf())
+  await expect(screen(page, 'done')).toBeVisible()
+
+  const { log, first } = await steps()
+  const active2 = first(2, 'is-active')
+  const done3 = first(3, 'is-done')
+  expect(active2, 'step 2 was never active').toBeGreaterThanOrEqual(0)
+  expect(done3, 'step 3 was done before step 2 was active').toBeGreaterThan(active2)
+  expect(log[done3].at - log[active2].at, 'ms step 2 stayed active').toBeGreaterThanOrEqual(300)
+})
+
+test('a tiny locked PDF reaches Done without ever showing the Unlocking screen', async ({ page }) => {
+  await page.goto('/')
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+  await expect(screen(page, 'unlock')).toBeVisible()
+  const busyShown = await watchBusy(page)
+  await enterPassword(page, 'secret')
+  await expect(screen(page, 'done')).toBeVisible()
+  expect(await busyShown()).toBe(false)
+})
+
+test('a bloated locked PDF ticks steps 1, 2 and 3 in order, the second at least 300 ms after the first', async ({ page }) => {
+  await slowWorker(page, 0)
+  await page.goto('/')
+  await pickFile(page, 'scan.pdf', await bloatedPdf({ openPassword: 'secret' }))
+  await expect(screen(page, 'unlock')).toBeVisible()
+  const steps = await recordSteps(page)
+  await page.evaluate(() => window.holdWorker())
+  await enterPassword(page, 'secret')
+  await expect(screen(page, 'done')).toBeVisible()
+
+  const { log, first } = await steps()
+  const ticks = [1, 2, 3].map((step) => first(step, 'is-done'))
+  expect(ticks.every((i) => i >= 0), 'a step never ticked').toBe(true)
+  expect([...ticks].sort((a, b) => a - b)).toEqual(ticks)
+  expect(log[ticks[1]].at - log[ticks[0]].at, 'ms between the first tick and the second').toBeGreaterThanOrEqual(300)
 })
