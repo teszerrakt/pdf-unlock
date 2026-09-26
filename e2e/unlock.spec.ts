@@ -2,8 +2,10 @@ import type { Page } from '@playwright/test'
 import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf } from '../test/fixtures.ts'
 import { isLocked, qpdf } from '../test/qpdf.ts'
 import { readZip } from '../test/unzip.ts'
-import { downloadCopy, downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test } from './test.ts'
+import { downloadCopy, downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test, waitForServiceWorker } from './test.ts'
 
+// A test that navigates again first waits for this visit's service worker: leaving while sw.js still
+// loads makes WebKit reject the registration, which the privacy guard reports as an uncaught error.
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
@@ -50,6 +52,7 @@ test.describe('date forms', () => {
   // Every candidate is checked against today; 2026-09-26 keeps `900805` and `060890` in the past.
   test.beforeEach(async ({ page }) => {
     await page.clock.setFixedTime(new Date(2026, 8, 26, 12))
+    await waitForServiceWorker(page)
     await page.goto('/')
   })
 
@@ -308,6 +311,7 @@ test.describe('batch', () => {
         }
       }
     })
+    await waitForServiceWorker(page)
     await page.goto('/')
     const pdf = await lockedPdf({ openPassword: 'secret' })
     await pickFiles(page, [
