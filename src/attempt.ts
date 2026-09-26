@@ -4,12 +4,13 @@
 // worker answers and user actions, and renders what this calls on `Ui`.
 import { next, settled, start, type Action, type Batch, type Event as BatchEvent, type RowState, type Summary } from './batch'
 import { dateForms } from './dates'
-import { createPacer } from './pace'
+import { createPacer, realClock, type Clock } from './pace'
 import type { WorkerRequest, WorkerResponse } from './unlock.worker'
 
-export type View = 'pick' | 'busy' | 'unlock' | 'done' | 'stop' | 'relock' | 'batch' | 'batch-done'
+export const views = ['pick', 'busy', 'unlock', 'done', 'stop', 'relock', 'batch', 'batch-done'] as const
+export type View = (typeof views)[number]
 
-// A deeper view slides in from the right, a shallower one from the left.
+// Going to a deeper view moves forward, to a shallower one back.
 const depth: Record<View, number> = { pick: 0, unlock: 1, busy: 2, done: 3, stop: 3, relock: 4, batch: 2, 'batch-done': 3 }
 
 // Work that ends within this many ms skips the Unlocking screen, so a quick answer does not flash it.
@@ -25,31 +26,22 @@ const TRY_CAP = 1000
 const ROW_FLOOR = 200
 const ROW_CAP = 2000
 
-export type Clock = { now(): number; later(fn: () => void, ms: number): () => void }
-
-const realClock: Clock = {
-  now: () => performance.now(),
-  later(fn, ms) {
-    const timer = setTimeout(fn, ms)
-    return () => clearTimeout(timer)
-  },
-}
+export type { Clock }
 
 // The password prompt. `tried`: the date forms tried after the exact text, for the wrong-password line.
 export type Prompt = { name: string; size: number; wrong: boolean; tried: number; batch: { at: number; of: number } | null }
 
 export type Stop = { type: 'not-locked' | 'not-pdf'; name: string } | { type: 'failed'; text: string } | { type: 'crashed' }
 
-type Unlocked = Extract<WorkerResponse, { type: 'unlocked' }>
+export type Unlocked = Extract<WorkerResponse, { type: 'unlocked' }>
 
 export type Ui = {
   // `direction` is null when the view already shows; it is entered again all the same.
   show(view: View, direction: 'fwd' | 'back' | null): void
-  // Labels the Unlocking or Locking screen.
   busy(kind: 'unlock' | 'lock', name: string): void
   // Step `n` is active; the ones before it are done.
   steps(n: number): void
-  // The date-try counter under step 2, or none.
+  // The date-try counter, or none.
   trying(count: { n: number; of: number } | null): void
   ask(prompt: Prompt): void
   unlocked(outcome: Unlocked, file: { name: string; size: number }): void
@@ -65,7 +57,7 @@ export type Ui = {
   batchDone(summary: Summary, rows: RowState[]): void
 }
 
-// `start(id)` starts a worker whose answers come back through `answer(id, …)`; `stop()` ends it.
+// `start(id)` starts a worker whose answers come back through `answer(id, …)`.
 export type Work = { start(id: number): void; send(request: WorkerRequest): void; stop(): void }
 
 type Options = { clock?: Clock; reduced?: () => boolean; today?: () => Date }
@@ -104,10 +96,6 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     ui.steps(n)
   }
 
-  function startWorker() {
-    work.start(++worker)
-  }
-
   function stopWorker() {
     work.stop()
     worker++
@@ -133,12 +121,11 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     ui.clear()
   }
 
-  // Starts a worker for one file, or for the lock of its unlocked copy.
   function begin(kind: 'unlock' | 'lock', name: string, request: WorkerRequest) {
     steps = lane(STEP_FLOOR)
     tries = lane(TRY_FLOOR, TRY_CAP)
     ui.busy(kind, name)
-    startWorker()
+    work.start(++worker)
     work.send(request)
   }
 
@@ -163,23 +150,18 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     if (response.type === 'restricted') return setSteps(2)
     if (response.type === 'trying') return ui.trying({ n: response.n, of: response.of })
     cancelPending()
+    if (response.type === 'needs-password' || response.type === 'wrong-password') return ask(response.type === 'wrong-password')
+    stopWorker()
     switch (response.type) {
-      case 'needs-password':
-      case 'wrong-password':
-        return ask(response.type === 'wrong-password')
       case 'not-locked':
-        stopWorker()
         return stop({ type: 'not-locked', name: file.name })
       case 'unlocked':
-        stopWorker()
         ui.unlocked(response, file)
         return finish()
       case 'locked':
-        stopWorker()
         ui.locked(response.pdf)
         return finish()
       case 'unreadable':
-        stopWorker()
         return stop({ type: 'failed', text: response.message })
     }
   }
@@ -296,7 +278,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     // The worker stopped with an error. In a batch that is the file's outcome, and the batch goes on.
     crashed(from: number) {
       if (from !== worker) return
-      if (run) return answer(from, { type: 'unreadable', message: '' })
+      if (run) return batchAnswer({ type: 'unreadable', message: '' })
       stop({ type: 'crashed' })
     },
     open(files: File[]) {
@@ -341,7 +323,6 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
       go('relock')
     },
     leaveRelock,
-    // Paced exactly like an unlock once the Locking screen shows.
     lock(copy: File, password: string) {
       locking = true
       step = 2

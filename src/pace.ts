@@ -1,8 +1,15 @@
 // Spaces out what the page shows so quick updates do not blur. Paces the display, never the work.
 
-type Clock = { now(): number; later(fn: () => void, ms: number): unknown }
+// `later` returns a function that cancels its timer.
+export type Clock = { now(): number; later(fn: () => void, ms: number): () => void }
 
-const realClock: Clock = { now: () => performance.now(), later: (fn, ms) => setTimeout(fn, ms) }
+export const realClock: Clock = {
+  now: () => performance.now(),
+  later(fn, ms) {
+    const timer = setTimeout(fn, ms)
+    return () => clearTimeout(timer)
+  },
+}
 
 // Each update runs at least `floor` ms after the one before it, until the pacer has added `cap` ms
 // of wait in all; after that, updates run as they arrive.

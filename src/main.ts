@@ -10,12 +10,10 @@ import { browserName, isIos as detectIos, modifierKey, type Brand } from './plat
 import { tryingText, wrongText } from './dates'
 import { doneText, saveAllChoice, saveChoice } from './save'
 import { rowText, type RowState, type Summary } from './batch'
-import { createAttempt, type Prompt, type Stop, type Ui, type View } from './attempt'
+import { createAttempt, views, type Prompt, type Stop, type Unlocked, type View } from './attempt'
 import { storeZip } from './zip'
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
-
-const views: View[] = ['pick', 'busy', 'unlock', 'done', 'stop', 'relock', 'batch', 'batch-done']
 
 const fileInput = byId<HTMLInputElement>('file')
 const drop = byId('drop')
@@ -53,7 +51,6 @@ let prompt: Prompt | null = null
 let isWrong = false
 let toastTimer = 0
 // A batch's unlocked copies and their object URLs stay in memory until Unlock more or leaving.
-// `picked`: each file's own name; `names`: its unlocked copy's name, unique within the batch.
 let batch: { picked: string[]; names: string[]; copies: (File | null)[]; urls: string[] } | null = null
 
 function show(view: View, direction: 'fwd' | 'back' | null) {
@@ -117,27 +114,30 @@ function setTrying(count: { n: number; of: number } | null) {
   if (count) byId('trying').textContent = tryingText(count.n, count.of)
 }
 
-function stopCopy(reason: Stop): [title: string, text: string, asleep?: boolean] {
+function stop(reason: Stop) {
+  let title = 'That didn’t work.'
+  let text: string
   switch (reason.type) {
     case 'not-locked':
-      return ['Nothing to unlock.', `${reason.name} has no password. It already opens anywhere.`, true]
+      title = 'Nothing to unlock.'
+      text = `${reason.name} has no password. It already opens anywhere.`
+      break
     case 'not-pdf':
-      return ['That’s not a PDF.', `${reason.name} is not a PDF. Choose a PDF file.`]
+      title = 'That’s not a PDF.'
+      text = `${reason.name} is not a PDF. Choose a PDF file.`
+      break
     case 'crashed':
-      return ['That didn’t work.', 'Unlocking failed. Reload the page and try again.']
+      text = 'Unlocking failed. Reload the page and try again.'
+      break
     case 'failed':
-      return ['That didn’t work.', reason.text]
+      text = reason.text
   }
-}
-
-function stop(reason: Stop) {
-  const [title, text, asleep] = stopCopy(reason)
   byId('stop-title').textContent = title
   byId('stop-text').textContent = text
-  byId('stop-cat').className = asleep ? 'art cat-5 float' : 'art cat-4'
+  byId('stop-cat').className = reason.type === 'not-locked' ? 'art cat-5 float' : 'art cat-4'
 }
 
-// Drop everything tied to the last file: worker, typed password, output blobs.
+// Drop everything tied to the last file: typed passwords, output blobs.
 function clear() {
   if (downloadUrl) URL.revokeObjectURL(downloadUrl)
   downloadUrl = null
@@ -185,8 +185,6 @@ function markWrong() {
   replay(wrong, 'err')
   replay(byId('unlock-cat-wrap'), 'swap')
 }
-
-type Unlocked = Parameters<Ui['unlocked']>[0]
 
 function showUnlocked({ pdf, hadPassword, password: worked, form }: Unlocked, file: { name: string; size: number }) {
   password.value = ''
@@ -263,7 +261,7 @@ function startBatch(files: File[], states: RowState[]) {
   batch = { picked, names: uniqueNames(picked.map((name) => unlockedName(name || 'document.pdf'))), copies: [], urls: [] }
   remember.checked = true
   byId('batch-title').textContent = `Unlocking ${files.length} files`
-  byId('batch-rows').replaceChildren(...files.map((file, i) => row(file.name, states[i])))
+  byId('batch-rows').replaceChildren(...picked.map((name, i) => row(name, states[i])))
 }
 
 function row(name: string, state: RowState) {
@@ -358,7 +356,6 @@ const attempt = createAttempt(
   },
   {
     start(id) {
-      worker?.terminate()
       worker = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
       worker.onmessage = (event: MessageEvent<WorkerResponse>) => attempt.answer(id, event.data)
       worker.onerror = () => attempt.crashed(id)
