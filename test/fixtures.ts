@@ -64,35 +64,42 @@ export async function lockedPdf({ openPassword = '', ownerPassword = 'owner', bi
 // A locked PDF with restrictions and no open password.
 export const restrictedPdf = (ownerPassword = 'owner') => lockedPdf({ ownerPassword })
 
-// A locked PDF written the way scanners and form exporters write one. About 270 KB, so the saving
-// clears the 50 KB the Done text needs before it names one.
-export function bloatedPdf(lock: Pick<Lock, 'openPassword'> = {}) {
-  const lines = Array.from({ length: 5000 }, (_, i) => `BT /F1 8 Tf 10 ${i % 140} Td (Sphynx fixture line ${i}) Tj ET`)
-  return lockedPdf(lock, source(lines.join('\n')), ['--compress-streams=n', '--object-streams=disable'])
-}
+// Text drawing about 270 KB long, so the saving clears the 50 KB the Done text needs before it names one.
+const bloatedText = () =>
+  Array.from({ length: 5000 }, (_, i) => `BT /F1 8 Tf 10 ${i % 140} Td (Sphynx fixture line ${i}) Tj ET`).join('\n')
 
-// A locked PDF with a photo-like image stored the way PNG data is: Flate over PNG Sub-filtered rows.
-// The filter is what compresses it; inflating and re-deflating without one makes it bigger.
-export function pngImagePdf(lock: Pick<Lock, 'openPassword'> = {}) {
+// A photo-like image stored the way PNG data is: Flate over PNG Sub-filtered rows. The filter is what
+// compresses it; inflating and re-deflating without one makes it bigger.
+function pngImage() {
   const width = 500
   let seed = 1
-  let level = 128
   const rows = Array.from({ length: 500 }, () => {
     const row = Buffer.alloc(width + 1)
     row[0] = 1 // Sub: each byte is the step from the pixel to its left.
     for (let x = 1; x <= width; x++) {
       seed = (seed * 1103515245 + 12345) % 2 ** 31
-      const step = (seed >> 16) % 3 - 1
-      level = (level + step + 256) % 256
-      row[x] = (step + 256) % 256
+      row[x] = (((seed >> 16) % 3) + 255) % 256 // a step of -1, 0 or +1
     }
     return row
   })
   const data = deflateSync(Buffer.concat(rows), { level: 9 }).toString('latin1')
   const params = `/DecodeParms << /Predictor 11 /Colors 1 /BitsPerComponent 8 /Columns ${width} >>`
-  const image = `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${rows.length} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode ${params} /Length ${data.length} >>\nstream\n${data}\nendstream`
-  return lockedPdf(lock, source('q 280 0 0 124 10 10 cm /Im1 Do Q', image))
+  return `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${rows.length} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode ${params} /Length ${data.length} >>\nstream\n${data}\nendstream`
 }
+
+const uncompressed = ['--compress-streams=n', '--decode-level=none', '--object-streams=disable']
+const drawImage = 'q 280 0 0 124 10 10 cm /Im1 Do Q'
+
+// A locked PDF written the way scanners and form exporters write one: streams left uncompressed,
+// no object streams.
+export const bloatedPdf = (lock: Pick<Lock, 'openPassword'> = {}) => lockedPdf(lock, source(bloatedText()), uncompressed)
+
+// A locked PDF whose one image is PNG data.
+export const pngImagePdf = (lock: Pick<Lock, 'openPassword'> = {}) => lockedPdf(lock, source(drawImage, pngImage()))
+
+// Both at once: the repack shrinks the text and grows the image.
+export const bloatedPngPdf = (lock: Pick<Lock, 'openPassword'> = {}) =>
+  lockedPdf(lock, source(`${drawImage}\n${bloatedText()}`, pngImage()), uncompressed)
 
 // Bytes that are not a PDF at all, and a PDF cut off halfway.
 export const notPdf = () => new TextEncoder().encode('This is a plain text file, not a PDF.\n')

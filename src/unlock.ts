@@ -63,15 +63,15 @@ export async function unlock(create: CreateQpdf, input: Uint8Array, password: st
   const decrypt = (extra: string[] = []) => run(create, input, [...args, '--decrypt', ...extra, '/in.pdf', '/out.pdf'])
   // A repack run that throws (a wasm abort, such as running out of memory) counts as failed.
   let { errors, output } = await decrypt(repack).catch(() => ({ errors: '', output: undefined }))
-  // A file the repack run fails on gets the plain decrypt; a wrong password would fail that too.
-  if (!output && !isPasswordError(errors)) ({ errors, output } = await decrypt())
-  // --recompress-flate drops PNG predictors, which can grow an image several times over. A copy
-  // no smaller than the input gets the plain decrypt too, and the smaller of the two wins. That run
-  // failing, even running out of memory, still leaves the repacked copy.
-  else if (output && output.length >= input.length) {
+  // --recompress-flate drops PNG predictors, which can grow an image several times over while the
+  // rest of the file shrinks. So the plain decrypt always runs too, and the smaller copy wins. That
+  // run failing, even running out of memory, still leaves the repacked copy.
+  if (output) {
     const plain = await decrypt().then(({ output }) => output, () => undefined)
     if (plain && plain.length < output.length) output = plain
   }
+  // A file the repack run fails on gets the plain decrypt; a wrong password would fail that too.
+  else if (!isPasswordError(errors)) ({ errors, output } = await decrypt())
   if (output) return { type: 'unlocked', pdf: output, hadPassword: password !== null }
   if (isPasswordError(errors)) return { type: password === null ? 'needs-password' : 'wrong-password' }
   return unreadable(errors)

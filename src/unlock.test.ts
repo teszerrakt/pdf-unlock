@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, pngImagePdf, realWorld, restrictedPdf } from '../test/fixtures'
+import { bloatedPdf, bloatedPngPdf, brokenPdf, lockedPdf, notPdf, plainPdf, pngImagePdf, realWorld, restrictedPdf } from '../test/fixtures'
 import { createQpdf, isLocked, qpdf } from '../test/qpdf'
 import { open, unlock, type CreateQpdf, type Outcome, type Prompt } from './unlock'
 
@@ -98,8 +98,11 @@ describe('repacking the unlocked copy', () => {
     expect(copy.length).toBeLessThan(plain.output!.length)
   })
 
-  it('never makes the unlocked copy bigger than a plain decrypt, even for a PNG-filtered image', async () => {
-    const pdf = await pngImagePdf({ openPassword: 'secret' })
+  it.each([
+    ['a PNG image', pngImagePdf],
+    ['uncompressed text beside a PNG image', bloatedPngPdf],
+  ])('never makes the unlocked copy bigger than a plain decrypt, for %s', async (_, fixture) => {
+    const pdf = await fixture({ openPassword: 'secret' })
     const copy = await expectUnlockedCopy(await tryPassword(pdf, 'secret'), true)
     const plain = await qpdf(pdf, ['--password=secret', '--decrypt', '/in.pdf', '/out.pdf'])
     expect(copy.length).toBeLessThanOrEqual(plain.output!.length)
