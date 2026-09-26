@@ -1,11 +1,13 @@
 import createModule from '@neslinesli93/qpdf-wasm'
 import wasmUrl from '@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url'
+import type { Candidate } from './dates'
 import { open, unlock, type CreateQpdf, type Outcome, type Prompt, type Qpdf } from './unlock'
 
-export type WorkerRequest = { type: 'open'; file: File } | { type: 'unlock'; password: string }
+export type WorkerRequest = { type: 'open'; file: File } | { type: 'unlock'; candidates: Candidate[] }
 
 // `restricted`: the file opens without a password; its restrictions are being removed.
-export type WorkerResponse = Outcome | Prompt | { type: 'restricted' }
+// `trying`: candidate `n` of `of` is being tried, after the ones before it missed.
+export type WorkerResponse = Outcome | Prompt | { type: 'restricted' } | { type: 'trying'; n: number; of: number }
 
 const create: CreateQpdf = async () => (await createModule({ locateFile: () => wasmUrl })) as unknown as Qpdf
 
@@ -17,7 +19,7 @@ async function respond(request: WorkerRequest): Promise<WorkerResponse> {
     input = new Uint8Array(await request.file.arrayBuffer())
     return open(create, input, () => self.postMessage({ type: 'restricted' } satisfies WorkerResponse))
   }
-  return unlock(create, input!, request.password)
+  return unlock(create, input!, request.candidates, (n, of) => self.postMessage({ type: 'trying', n, of } satisfies WorkerResponse))
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {

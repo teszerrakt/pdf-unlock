@@ -36,6 +36,10 @@ _Avoid_: Needs password state, password screen
 A password prompt shown again because the typed password did not open the PDF. The attempt continues.
 _Avoid_: Invalid password, failed attempt
 
+**Date form**:
+One way of writing a typed date as digits (day-month-year, year-month-day, month-day-year, each with a long or short year), tried after the exact text. The app names the form that worked.
+_Avoid_: Variant, permutation, guess
+
 **Abandoned**:
 How an attempt ends without an outcome: the user pressed Cancel or Back, or picked another file.
 _Avoid_: Cancelled, reset

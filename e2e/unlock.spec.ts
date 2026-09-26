@@ -43,6 +43,41 @@ test('wrong password: the prompt is marked wrong until the user types again', as
   await expect(screen(page, 'done')).toBeVisible()
 })
 
+test.describe('date forms', () => {
+  // Every candidate is checked against today; 2026-09-26 keeps `900805` and `060890` in the past.
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 8, 26, 12))
+    await page.goto('/')
+  })
+
+  test('a date typed in another form: the Done text names the date form that worked', async ({ page }) => {
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: '05081990' }))
+    await enterPassword(page, '900805')
+    await expect(screen(page, 'done')).toBeVisible()
+    await expect(page.locator('#done-text')).toContainText('Your password worked written as 05081990 (day-month-year).')
+    await downloadUnlockedCopy(page)
+  })
+
+  test('wrong password: the line counts the date forms tried, and only when there were some', async ({ page }) => {
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: '05081990' }))
+    await enterPassword(page, '060890')
+    await expect(page.locator('#wrong')).toHaveText('Wrong password. Tried 7 ways of writing it as a date.')
+    await enterPassword(page, 'nope')
+    await expect(page.locator('#wrong')).toHaveText('Wrong password. Try again.')
+  })
+})
+
+test('the promise: uses only the password you type, and its date forms', async ({ page }) => {
+  const promise = 'Uses only the password you type. If it’s a date, it also tries other ways of writing it.'
+  await expect(page.locator('#pick .note')).toHaveText(promise)
+  await expect(page.locator('footer span').first()).toHaveText(promise)
+  await page.locator('#how').click()
+  await expect(page.locator('#about .about-lede')).toHaveText(promise)
+  const fact = page.locator('#about .facts li').last()
+  await expect(fact.locator('strong')).toHaveText('Never guesses')
+  await expect(fact.locator('span')).toHaveText(/^Never guessesOnly your password, and its date forms\.$/)
+})
+
 test('restricted PDF: unlocked with no password prompt', async ({ page }) => {
   await pickFile(page, 'form.pdf', await restrictedPdf())
   await expect(screen(page, 'done')).toBeVisible()

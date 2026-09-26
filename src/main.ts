@@ -6,7 +6,8 @@ import type { WorkerRequest, WorkerResponse } from './unlock.worker'
 import { SHARE_ACTION, SHARE_CACHE, SHARED_AT_HEADER, SHARED_FILE, SHARED_NAME_HEADER, isLeftover } from './share-target'
 import { formatSize, isPdf, unlockedName } from './file'
 import { browserName, isIos as detectIos, modifierKey, type Brand } from './platform'
-import { doneText, saveChoice } from './save'
+import { dateForms } from './dates'
+import { doneText, saveChoice, type DoneOptions } from './save'
 import { createPacer } from './pace'
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -57,6 +58,9 @@ let isWrong = false
 let pending = 0
 let toastTimer = 0
 let pace = createPacer(0)
+let tries = createPacer(0)
+// Date forms in the last password tried, named on the wrong-password line.
+let tried = 0
 
 function show(view: View, then?: () => void) {
   if (view === current) return then?.()
@@ -128,6 +132,7 @@ function clear() {
   submit.disabled = false
   setReveal(false)
   setWrong(false)
+  byId('trying').hidden = true
 }
 
 function reset() {
@@ -146,6 +151,7 @@ function openFile(file: File) {
   fileSize = file.size
   step = 1
   pace = createPacer(reducedMotion.matches ? 0 : STEP_FLOOR)
+  tries = createPacer(reducedMotion.matches ? 0 : TRY_FLOOR)
   const attempt = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
   worker = attempt
   worker.onmessage = (event: MessageEvent<WorkerResponse>) => receive(attempt, event.data)
@@ -156,13 +162,17 @@ function openFile(file: File) {
 
 // Answers before the Unlocking screen shows are not paced, so quick work never shows it. A queued
 // answer is dropped once its attempt is abandoned or another screen, such as a stop, has replaced it.
+// Date tries count TRY_FLOOR apart, and an answer waits behind the counts queued before it.
 function receive(attempt: Worker, response: WorkerResponse) {
   if (current !== 'busy') return handle(response)
-  pace.push(() => worker === attempt && current === 'busy' && handle(response))
+  const live = () => worker === attempt && current === 'busy'
+  if (response.type === 'trying') return tries.push(() => live() && handle(response))
+  tries.push(() => pace.push(() => live() && handle(response)))
 }
 
 function handle(response: WorkerResponse) {
   if (response.type === 'restricted') return setSteps(2)
+  if (response.type === 'trying') return showTry(response.n, response.of)
   clearTimeout(pending)
   submit.disabled = false
   switch (response.type) {
@@ -173,11 +183,17 @@ function handle(response: WorkerResponse) {
       worker?.terminate()
       return stop('Nothing to unlock.', `${fileName} has no password. It already opens anywhere.`, true)
     case 'unlocked':
-      return finish(response.pdf, response.hadPassword)
+      return finish(response.pdf, response.hadPassword, { password: response.password, form: response.form })
     case 'unreadable':
       worker?.terminate()
       return fail(response.message)
   }
+}
+
+function showTry(n: number, of: number) {
+  const trying = byId('trying')
+  trying.textContent = `Trying other ways of writing the date · ${n} of ${of}`
+  trying.hidden = false
 }
 
 function askPassword(wrongOne: boolean) {
@@ -202,13 +218,14 @@ function setWrong(on: boolean) {
 }
 
 function markWrong() {
+  byId('wrong-text').textContent = tried ? `Wrong password. Tried ${tried} ways of writing it as a date.` : 'Wrong password. Try again.'
   setWrong(true)
   replay(field, 'shake')
   replay(wrong, 'err')
   replay(byId('unlock-cat-wrap'), 'swap')
 }
 
-function finish(pdf: Uint8Array, hadPassword: boolean) {
+function finish(pdf: Uint8Array, hadPassword: boolean, written: DoneOptions) {
   worker?.terminate()
   worker = null
   password.value = ''
@@ -225,7 +242,7 @@ function finish(pdf: Uint8Array, hadPassword: boolean) {
   download.classList.toggle('secondary', choice.primary === 'share')
   byId('done-name').textContent = name
   byId('done-info').textContent = `${formatSize(unlocked.size)} · No password`
-  byId('done-text').textContent = doneText(fileName, hadPassword, fileSize - unlocked.size, { of: fileSize })
+  byId('done-text').textContent = doneText(fileName, hadPassword, fileSize - unlocked.size, { of: fileSize, ...written })
   if (current !== 'busy') return show('done')
   // Let the last step tick before leaving the Unlocking screen.
   setSteps(4)
@@ -255,8 +272,11 @@ unlockForm.addEventListener('submit', (event) => {
   event.preventDefault()
   submit.disabled = true
   step = 2
+  byId('trying').hidden = true
+  const candidates = dateForms(password.value, new Date())
+  tried = candidates.length - 1
   wait()
-  send({ type: 'unlock', password: password.value })
+  send({ type: 'unlock', candidates })
 })
 
 password.addEventListener('input', () => {

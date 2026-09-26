@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { bloatedPdf, bloatedPngPdf, brokenPdf, lockedPdf, notPdf, plainPdf, pngImagePdf, realWorld, restrictedPdf } from '../test/fixtures'
 import { createQpdf, isLocked, qpdf } from '../test/qpdf'
+import { dateForms } from './dates'
 import { open, unlock, type CreateQpdf, type Outcome, type Prompt } from './unlock'
 
 const openFile = (pdf: Uint8Array, onRestricted?: () => void) => open(createQpdf, pdf, onRestricted)
-const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, password)
+// The exact text alone, with no date forms.
+const typed = (password: string) => [{ password, form: null }]
+const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, typed(password))
 
 // An unlocked copy must open with no password and pass qpdf's structural check.
 async function expectUnlockedCopy(result: Outcome | Prompt, hadPassword: boolean) {
@@ -114,7 +117,7 @@ describe('repacking the unlocked copy', () => {
       if (++runs > 1) throw new RangeError('WebAssembly.Memory(): could not allocate memory')
       return createQpdf()
     }
-    await expectUnlockedCopy(await unlock(outOfMemoryAfterOne, await pngImagePdf({ openPassword: 'secret' }), 'secret'), true)
+    await expectUnlockedCopy(await unlock(outOfMemoryAfterOne, await pngImagePdf({ openPassword: 'secret' }), typed('secret')), true)
     expect(runs).toBe(2)
   })
 
@@ -128,7 +131,7 @@ describe('repacking the unlocked copy', () => {
       }
       return q
     }
-    await expectUnlockedCopy(await unlock(abortingRepack, await lockedPdf({ openPassword: 'secret' }), 'secret'), true)
+    await expectUnlockedCopy(await unlock(abortingRepack, await lockedPdf({ openPassword: 'secret' }), typed('secret')), true)
   })
 
   it('still unlocks, with a plain decrypt, when the repack run fails', async () => {
@@ -142,10 +145,54 @@ describe('repacking the unlocked copy', () => {
       }
       return q
     }
-    const result = await unlock(failingRepack, await lockedPdf({ openPassword: 'secret' }), 'secret')
+    const result = await unlock(failingRepack, await lockedPdf({ openPassword: 'secret' }), typed('secret'))
     await expectUnlockedCopy(result, true)
     expect(calls).toHaveLength(2)
     expect(calls[1]).not.toEqual(expect.arrayContaining([expect.stringMatching(/object-streams|recompress-flate|compression-level/)]))
+  })
+})
+
+describe('trying the date forms of a typed password', () => {
+  const today = new Date(2026, 8, 26)
+
+  // Records the password of every qpdf run. A successful unlock runs qpdf twice with the password
+  // that worked: the repack run, then the plain decrypt it is compared with.
+  function recordingPasswords() {
+    const ran: string[] = []
+    const create: CreateQpdf = async () => {
+      const q = await createQpdf()
+      const callMain = q.callMain.bind(q)
+      q.callMain = (args) => {
+        ran.push(args.find((arg) => arg.startsWith('--password='))!.slice('--password='.length))
+        return callMain(args)
+      }
+      return q
+    }
+    return { ran, create }
+  }
+
+  it('unlocks with the date form that worked, trying the candidates in order and stopping there', async () => {
+    const { ran, create } = recordingPasswords()
+    const result = await unlock(create, await lockedPdf({ openPassword: '05081990' }), dateForms('900805', today))
+    expect(result).toMatchObject({ type: 'unlocked', form: 'DDMMYYYY', password: '05081990' })
+    expect(ran).toEqual(['900805', '05081990', '05081990'])
+  })
+
+  it('unlocks with form null when the exact text worked, running no date form', async () => {
+    const { ran, create } = recordingPasswords()
+    const result = await unlock(create, await lockedPdf({ openPassword: '05081990' }), dateForms('05081990', today))
+    expect(result).toMatchObject({ type: 'unlocked', form: null, password: '05081990' })
+    expect(ran).toEqual(['05081990', '05081990'])
+  })
+
+  it('marks the password wrong after running every candidate once', async () => {
+    const { ran, create } = recordingPasswords()
+    const candidates = dateForms('060890', today)
+    const onTry = vi.fn()
+    const result = await unlock(create, await lockedPdf({ openPassword: '05081990' }), candidates, onTry)
+    expect(result).toEqual({ type: 'wrong-password' })
+    expect(ran).toEqual(candidates.map(({ password }) => password))
+    expect(onTry.mock.calls).toEqual(candidates.slice(1).map((_, i) => [i + 2, candidates.length]))
   })
 })
 

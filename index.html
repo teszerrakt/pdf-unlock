@@ -89,7 +89,7 @@
             <span class="drop-keys desk">or drop it here, or paste with <kbd id="mod-key">Ctrl</kbd><kbd>V</kbd></span>
           </label>
 
-          <p class="note mob rise d220">Removes a password you know. It never guesses one.</p>
+          <p class="note mob rise d220">Uses only the password you type. If it’s a date, it also tries other ways of writing it.</p>
         </section>
 
         <form id="unlock" class="screen unlock" hidden>
@@ -117,7 +117,7 @@
             </div>
             <p id="wrong" class="error err" role="alert" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.3h.01" /></svg>
-              Wrong password. Try again.
+              <span id="wrong-text">Wrong password. Try again.</span>
             </p>
           </div>
           <div class="actions">
@@ -141,7 +141,7 @@
           </div>
           <ol id="steps" class="steps rise d140">
             <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>Reading the file</li>
-            <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>Removing the password</li>
+            <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span><span>Removing the password<span id="trying" class="step-note" hidden></span></span></li>
             <li><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>Ready to save</li>
           </ol>
           <p class="assure rise d200">
@@ -198,7 +198,7 @@
       </main>
 
       <footer class="foot desk">
-        <span>Removes a password you know. It never guesses one.</span>
+        <span>Uses only the password you type. If it’s a date, it also tries other ways of writing it.</span>
         <span>No uploads · Works offline</span>
       </footer>
     </div>
@@ -214,7 +214,7 @@
       </button>
       <span class="about-cat" aria-hidden="true"><span class="art cat-5 float"></span></span>
       <h2 id="about-title" class="display about-in">Your PDF stays <em>with you.</em></h2>
-      <p class="about-lede about-in">Sphynx removes a password you already know, right here in your browser.</p>
+      <p class="about-lede about-in">Uses only the password you type. If it’s a date, it also tries other ways of writing it.</p>
       <ol class="how-steps about-in">
         <li><span>1</span>Choose a PDF</li>
         <li><span>2</span>Type its password</li>
@@ -235,7 +235,7 @@
         </li>
         <li class="about-in">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10.5" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></svg>
-          <span><strong>Never guesses</strong>Only a password you know.</span>
+          <span><strong>Never guesses</strong>Only your password, and its date forms.</span>
         </li>
       </ul>
       <button id="about-ok" type="button" class="button primary tap about-in">Got it</button>

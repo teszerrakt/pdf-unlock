@@ -6,12 +6,15 @@ export type Qpdf = {
   FS: { writeFile(path: string, data: Uint8Array): void; readFile(path: string): Uint8Array }
 }
 
+import type { Candidate, Form } from './dates'
+
 // Loads a fresh qpdf instance. The browser passes the wasm URL, Node passes the wasm bytes.
 export type CreateQpdf = () => Promise<Qpdf>
 
 // How an attempt ends (see CONTEXT.md).
 export type Outcome =
-  | { type: 'unlocked'; pdf: Uint8Array; hadPassword: boolean }
+  // `password`: the candidate that worked, `form` its date form (null for the exact text).
+  | { type: 'unlocked'; pdf: Uint8Array; hadPassword: boolean; password: string | null; form: Form | null }
   | { type: 'not-locked' }
   | { type: 'unreadable'; message: string }
 
@@ -57,8 +60,25 @@ export async function open(create: CreateQpdf, input: Uint8Array, onRestricted?:
 // Lossless flags only: see Repack in CONTEXT.md.
 const repack = ['--object-streams=generate', '--recompress-flate', '--compression-level=9']
 
-// Removes the lock with the given open password, or with none for a restricted PDF.
-export async function unlock(create: CreateQpdf, input: Uint8Array, password: string | null): Promise<Outcome | Prompt> {
+// Removes the lock with the first candidate that opens the PDF, trying them in order, or with no
+// password for a restricted PDF. `onTry(n, of)` fires before each candidate after the first.
+export async function unlock(
+  create: CreateQpdf,
+  input: Uint8Array,
+  candidates: Candidate[] | null,
+  onTry?: (n: number, of: number) => void,
+): Promise<Outcome | Prompt> {
+  if (!candidates) return decryptWith(create, input, null)
+  for (const [i, { password, form }] of candidates.entries()) {
+    if (i > 0) onTry?.(i + 1, candidates.length)
+    const result = await decryptWith(create, input, password)
+    if (result.type === 'unlocked') return { ...result, form }
+    if (result.type !== 'wrong-password') return result
+  }
+  return { type: 'wrong-password' }
+}
+
+async function decryptWith(create: CreateQpdf, input: Uint8Array, password: string | null): Promise<Outcome | Prompt> {
   const args = password === null ? [] : [`--password=${password}`]
   const decrypt = (extra: string[] = []) => run(create, input, [...args, '--decrypt', ...extra, '/in.pdf', '/out.pdf'])
   // A repack run that throws (a wasm abort, such as running out of memory) counts as failed.
@@ -72,7 +92,7 @@ export async function unlock(create: CreateQpdf, input: Uint8Array, password: st
   }
   // A file the repack run fails on gets the plain decrypt; a wrong password would fail that too.
   else if (!isPasswordError(errors)) ({ errors, output } = await decrypt())
-  if (output) return { type: 'unlocked', pdf: output, hadPassword: password !== null }
+  if (output) return { type: 'unlocked', pdf: output, hadPassword: password !== null, password, form: null }
   if (isPasswordError(errors)) return { type: password === null ? 'needs-password' : 'wrong-password' }
   return unreadable(errors)
 }

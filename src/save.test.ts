@@ -48,6 +48,24 @@ describe('doneText', () => {
     )
   })
 
+  it('names the date form the open password worked written as', () => {
+    expect(doneText('statement.pdf', true, 0, { password: '05081990', form: 'DDMMYYYY' })).toMatch(
+      /Your password worked written as 05081990 \(day-month-year\)\.$/,
+    )
+  })
+
+  it('names the date form after the saving from the repack', () => {
+    expect(doneText('statement.pdf', true, 2_200_000, { password: '900805', form: 'YYMMDD' })).toBe(
+      'This copy opens anywhere, no password needed. It’s also 2.2 MB smaller. Your password worked written as 900805 (year-month-day, short year).',
+    )
+  })
+
+  it('names no date form when the exact text worked', () => {
+    expect(doneText('statement.pdf', true, 0, { password: '05081990', form: null })).toBe(
+      'This copy opens anywhere, no password needed.',
+    )
+  })
+
   it('mentions a saving of exactly 50 KB and 5% of the input', () => {
     expect(doneText('statement.pdf', true, 50_000, { of: 1_000_000 })).toBe(
       'This copy opens anywhere, no password needed. It’s also 50 KB smaller.',
