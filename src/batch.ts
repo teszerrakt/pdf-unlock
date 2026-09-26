@@ -62,7 +62,7 @@ export function next(batch: Batch, event: Event, today = new Date()): { batch: B
     case 'skip':
       return advance(set('skipped', { typed: null }))
     default:
-      return advance(set(event.type))
+      return advance(set(event.type, { typed: null }))
   }
 }
 

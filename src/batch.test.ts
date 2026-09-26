@@ -55,6 +55,14 @@ describe('a batch', () => {
     expect(last).toEqual({ type: 'ask', index: 1, wrong: false })
   })
 
+  it('does not remember a typed password whose file ended unreadable or not locked', () => {
+    for (const outcome of ['unreadable', 'not-locked'] as const) {
+      const { batch, last } = run(3, [{ type: 'needs-password' }, typed('wrongguess'), { type: outcome }, { type: 'unlocked' }, { type: 'needs-password' }])
+      expect(batch.remembered).toBeNull()
+      expect(last).toEqual({ type: 'ask', index: 2, wrong: false })
+    }
+  })
+
   it('marks the prompt wrong when a typed password misses', () => {
     const { last } = run(2, [{ type: 'needs-password' }, typed('nope')])
     expect(last.type).toBe('unlock')
