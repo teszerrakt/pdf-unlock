@@ -116,6 +116,20 @@ describe('locking the unlocked copy with an own password', () => {
     expect(await tryPassword(await lockedCopy(), 'other')).toEqual({ type: 'wrong-password' })
   })
 
+  it('locks and reopens with an own password of 127 UTF-8 bytes, the most AES-256 takes', async () => {
+    const password = 'x'.repeat(127)
+    await expectUnlockedCopy(await tryPassword(await lock(createQpdf, plainPdf(), password), password), true)
+  })
+
+  it.each([
+    ['128 ASCII letters', 'x'.repeat(128)],
+    ['64 two-byte letters (128 bytes)', 'é'.repeat(64)],
+  ])('refuses an own password over 127 UTF-8 bytes without loading qpdf: %s', async (_, password) => {
+    const create = vi.fn(createQpdf)
+    await expect(lock(create, plainPdf(), password)).rejects.toThrow()
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('refuses an empty own password without loading qpdf', async () => {
     const create = vi.fn(createQpdf)
     await expect(lock(create, plainPdf(), '')).rejects.toThrow()

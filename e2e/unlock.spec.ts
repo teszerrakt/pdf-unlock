@@ -192,6 +192,17 @@ test.describe('own password', () => {
     await expect(screen(page, 'stop')).toBeVisible()
   })
 
+  test('an own password over 127 UTF-8 bytes keeps Lock it disabled and says it is too long', async ({ page }) => {
+    const lockIt = page.getByRole('button', { name: 'Lock it', exact: true })
+    const tooLong = page.getByText('Too long. Use a shorter password.', { exact: true })
+    await ownPassword(page).fill('é'.repeat(64))
+    await expect(tooLong).toBeVisible()
+    await expect(lockIt).toBeDisabled()
+    await ownPassword(page).fill('x'.repeat(127))
+    await expect(tooLong).toBeHidden()
+    await expect(lockIt).toBeEnabled()
+  })
+
   test('the eye toggle hides the own password', async ({ page }) => {
     await page.getByRole('button', { name: 'Hide password', exact: true }).click()
     await expect(ownPassword(page)).toHaveAttribute('type', 'password')

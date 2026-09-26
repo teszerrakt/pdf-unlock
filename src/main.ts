@@ -2,6 +2,7 @@ import '@fontsource-variable/geist/wght.css'
 import '@fontsource/instrument-serif/400.css'
 import '@fontsource/instrument-serif/400-italic.css'
 import './style.css'
+import { isOwnPasswordTooLong } from './unlock'
 import type { WorkerRequest, WorkerResponse } from './unlock.worker'
 import { SHARE_ACTION, SHARE_CACHE, SHARED_AT_HEADER, SHARED_FILE, SHARED_NAME_HEADER, isLeftover } from './share-target'
 import { formatSize, isPdf, lockedName, unlockedName } from './file'
@@ -265,8 +266,16 @@ function askOwnPassword() {
 // Unlike the open password, the own password shows as it is typed until the eye toggle hides it.
 function clearOwnPassword() {
   ownPassword.value = ''
-  lockSubmit.disabled = true
+  checkOwnPassword()
   setReveal(true, ownPassword, ownReveal)
+}
+
+function checkOwnPassword() {
+  const tooLong = isOwnPasswordTooLong(ownPassword.value)
+  byId('too-long').hidden = !tooLong
+  byId('new-field').classList.toggle('wrong', tooLong)
+  ownPassword.setAttribute('aria-invalid', String(tooLong))
+  lockSubmit.disabled = locking || !ownPassword.value || tooLong
 }
 
 // Also stops a lock that started but has not reached the busy screen yet.
@@ -342,7 +351,7 @@ relockForm.addEventListener('submit', (event) => {
   ownPassword.value = ''
 })
 
-ownPassword.addEventListener('input', () => (lockSubmit.disabled = locking || !ownPassword.value))
+ownPassword.addEventListener('input', checkOwnPassword)
 ownReveal.addEventListener('click', () => setReveal(ownPassword.type === 'password', ownPassword, ownReveal))
 byId('relock-cancel').addEventListener('click', leaveRelock)
 byId('back').addEventListener('click', () => (current === 'relock' ? leaveRelock() : reset()))
