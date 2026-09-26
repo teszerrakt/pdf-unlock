@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { brokenPdf, lockedPdf, notPdf, plainPdf, realWorld, restrictedPdf } from '../test/fixtures'
 import { createQpdf, isLocked, qpdf } from '../test/qpdf'
-import { lock, open, unlock, type Outcome, type Prompt } from './unlock'
+import { lock, open, unlock, type LockResult, type Outcome, type Prompt } from './unlock'
 
 const openFile = (pdf: Uint8Array, onRestricted?: () => void) => open(createQpdf, pdf, onRestricted)
 const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, password)
@@ -94,18 +94,22 @@ it('leaves console.error as it found it', async () => {
 })
 
 describe('locking the unlocked copy with an own password', () => {
+  const lockedCopy = async () => {
+    const result = await lock(createQpdf, plainPdf(), 'hunter2')
+    expect(result.type).toBe('locked')
+    return (result as Extract<LockResult, { type: 'locked' }>).pdf
+  }
+
   it('makes a locked copy that pauses at the password prompt', async () => {
-    const copy = await lock(createQpdf, plainPdf(), 'hunter2')
-    expect(await openFile(copy)).toEqual({ type: 'needs-password' })
+    expect(await openFile(await lockedCopy())).toEqual({ type: 'needs-password' })
   })
 
   it('unlocks the locked copy with the own password', async () => {
-    await expectUnlockedCopy(await tryPassword(await lock(createQpdf, plainPdf(), 'hunter2'), 'hunter2'), true)
+    await expectUnlockedCopy(await tryPassword(await lockedCopy(), 'hunter2'), true)
   })
 
   it('uses AES-256 and adds no restrictions', async () => {
-    const copy = await lock(createQpdf, plainPdf(), 'hunter2')
-    const { stdout } = await qpdf(copy, ['--password=hunter2', '--show-encryption', '/in.pdf'])
+    const { stdout } = await qpdf(await lockedCopy(), ['--password=hunter2', '--show-encryption', '/in.pdf'])
     expect(stdout).toContain('R = 6')
     const permissions = stdout.filter((line) => /^(extract|print|modify)\b/.test(line))
     expect(permissions).toHaveLength(9)
@@ -113,12 +117,19 @@ describe('locking the unlocked copy with an own password', () => {
   })
 
   it('marks the password prompt wrong for anything but the own password', async () => {
-    expect(await tryPassword(await lock(createQpdf, plainPdf(), 'hunter2'), 'other')).toEqual({ type: 'wrong-password' })
+    expect(await tryPassword(await lockedCopy(), 'other')).toEqual({ type: 'wrong-password' })
   })
 
   it('refuses an empty own password without loading qpdf', async () => {
     const create = vi.fn(createQpdf)
     await expect(lock(create, plainPdf(), '')).rejects.toThrow()
     expect(create).not.toHaveBeenCalled()
+  })
+
+  it('ends unreadable when qpdf cannot read the copy', async () => {
+    expect(await lock(createQpdf, notPdf(), 'hunter2')).toEqual({
+      type: 'unreadable',
+      message: expect.stringMatching(/^This file could not be read as a PDF \(.+\)\.$/),
+    })
   })
 })

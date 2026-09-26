@@ -11,8 +11,7 @@ const load = createModule as unknown as (options: { wasmBinary: Uint8Array }) =>
 
 export const createQpdf: CreateQpdf = () => load({ wasmBinary })
 
-// Runs qpdf once on `input` and returns its exit code, stdout lines and /out.pdf, for building and
-// checking fixtures.
+// Runs qpdf once on `input`, for building and checking fixtures.
 export async function qpdf(input: Uint8Array, args: string[]) {
   const stdout: string[] = []
   // qpdf binds console.log and console.error when instantiated.

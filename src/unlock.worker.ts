@@ -1,6 +1,6 @@
 import createModule from '@neslinesli93/qpdf-wasm'
 import wasmUrl from '@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url'
-import { lock, open, unlock, type CreateQpdf, type Outcome, type Prompt, type Qpdf } from './unlock'
+import { lock, open, unlock, type CreateQpdf, type LockResult, type Outcome, type Prompt, type Qpdf } from './unlock'
 
 export type WorkerRequest =
   | { type: 'open'; file: File }
@@ -8,8 +8,8 @@ export type WorkerRequest =
   | { type: 'lock'; file: File; password: string }
 
 // `restricted`: the file opens without a password; its restrictions are being removed.
-// `locked`: the locked copy, made from an unlocked copy and an own password.
-export type WorkerResponse = Outcome | Prompt | { type: 'restricted' } | { type: 'locked'; pdf: Uint8Array }
+// `crashed`: qpdf threw, most likely out of memory; the page words it for the job it started.
+export type WorkerResponse = Outcome | Prompt | LockResult | { type: 'restricted' } | { type: 'crashed' }
 
 const create: CreateQpdf = async () => (await createModule({ locateFile: () => wasmUrl })) as unknown as Qpdf
 
@@ -21,9 +21,7 @@ async function respond(request: WorkerRequest): Promise<WorkerResponse> {
     input = new Uint8Array(await request.file.arrayBuffer())
     return open(create, input, () => self.postMessage({ type: 'restricted' } satisfies WorkerResponse))
   }
-  if (request.type === 'lock') {
-    return { type: 'locked', pdf: await lock(create, new Uint8Array(await request.file.arrayBuffer()), request.password) }
-  }
+  if (request.type === 'lock') return lock(create, new Uint8Array(await request.file.arrayBuffer()), request.password)
   return unlock(create, input!, request.password)
 }
 
@@ -32,10 +30,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   try {
     response = await respond(event.data)
   } catch {
-    const doing = event.data.type === 'lock' ? 'Locking' : 'Unlocking'
-    response = { type: 'unreadable', message: `${doing} failed. The file may be too large for this device.` }
+    response = { type: 'crashed' }
   }
   if (response.type === 'unlocked') input = null
-  const transfer = response.type === 'unlocked' || response.type === 'locked' ? [response.pdf.buffer as ArrayBuffer] : []
+  const transfer = 'pdf' in response ? [response.pdf.buffer as ArrayBuffer] : []
   self.postMessage(response, { transfer })
 }

@@ -45,7 +45,6 @@ export async function enterPassword(page: Page, password: string) {
   await page.getByRole('button', { name: 'Unlock', exact: true }).click()
 }
 
-// Downloads whichever copy the Save to device button offers.
 export async function downloadCopy(page: Page) {
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#download').click()])
   const stream = await download.createReadStream()

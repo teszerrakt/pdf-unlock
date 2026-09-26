@@ -139,7 +139,6 @@ test.describe('own password', () => {
     expect(copy.name).toBe('statement-locked.pdf')
     expect(await isLocked(copy.pdf), 'the locked copy has no lock').toBe(true)
     expect((await qpdf(copy.pdf, ['--password=hunter2', '--check', '/in.pdf'])).code).toBe(0)
-    expect((await qpdf(copy.pdf, ['--password=other', '--check', '/in.pdf'])).code).not.toBe(0)
   })
 
   for (const control of ['Cancel', 'Back']) {

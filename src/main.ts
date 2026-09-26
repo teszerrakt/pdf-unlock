@@ -47,7 +47,6 @@ let worker: Worker | null = null
 let fileName = ''
 let fileSize = 0
 let unlocked: File | null = null
-// What Share and Save to device hand over: the unlocked copy, or the locked copy made from it.
 let offered: File | null = null
 let downloadUrl: string | null = null
 let current: View = 'pick'
@@ -93,7 +92,6 @@ function setSteps(n: number) {
   })
 }
 
-// The busy screen's title and steps, while unlocking and while adding an own password.
 const busyText = {
   unlock: ['Unlocking…', 'Reading the file', 'Removing the password', 'Ready to save'],
   lock: ['Locking…', 'Reading the copy', 'Adding your password', 'Ready to save'],
@@ -102,7 +100,7 @@ const busyText = {
 function setBusy(kind: keyof typeof busyText, name: string) {
   const [title, ...labels] = busyText[kind]
   byId('busy-heading').textContent = title
-  steps.forEach((li, i) => (li.lastChild!.textContent = labels[i]))
+  steps.forEach((li, i) => (li.lastElementChild!.textContent = labels[i]))
   byId('busy-name').textContent = name
 }
 
@@ -157,8 +155,10 @@ function send(request: WorkerRequest) {
 function startWorker() {
   worker = new Worker(new URL('./unlock.worker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent<WorkerResponse>) => handle(event.data)
-  worker.onerror = () => fail('Unlocking failed. Reload the page and try again.')
+  worker.onerror = () => fail(`${doing()} failed. Reload the page and try again.`)
 }
+
+const doing = () => (locking ? 'Locking' : 'Unlocking')
 
 function openFile(file: File) {
   clear()
@@ -186,6 +186,9 @@ function handle(response: WorkerResponse) {
       return finish(response.pdf, response.hadPassword)
     case 'locked':
       return finishLock(response.pdf)
+    case 'crashed':
+      worker?.terminate()
+      return fail(`${doing()} failed. The file may be too large for this device.`)
     case 'unreadable':
       worker?.terminate()
       return fail(response.message)
@@ -237,7 +240,6 @@ function finish(pdf: Uint8Array, hadPassword: boolean) {
   pending = window.setTimeout(() => show('done'), reducedMotion.matches ? 0 : 500)
 }
 
-// Points Share and Save to device at `file`.
 function offer(file: File) {
   offered = file
   if (downloadUrl) URL.revokeObjectURL(downloadUrl)
@@ -252,7 +254,6 @@ function offer(file: File) {
   download.classList.toggle('secondary', choice.primary === 'share')
 }
 
-// Done shows the unlocked copy, or the locked copy once an own password is on it.
 function setDoneLocked(on: boolean) {
   byId('done-title').textContent = on ? 'Locked.' : 'Unlocked.'
   byId('done-badge-open').hidden = on
@@ -266,20 +267,13 @@ function askOwnPassword() {
   show('relock', () => ownPassword.focus())
 }
 
-// The own password is shown as it is typed until the eye toggle hides it.
-function setOwnReveal(on: boolean) {
-  ownPassword.type = on ? 'text' : 'password'
-  ownReveal.setAttribute('aria-label', on ? 'Hide password' : 'Show password')
-  ownReveal.setAttribute('aria-pressed', String(on))
-}
-
+// Unlike the open password, the own password shows as it is typed until the eye toggle hides it.
 function clearOwnPassword() {
   ownPassword.value = ''
   lockSubmit.disabled = true
-  setOwnReveal(true)
+  setReveal(true, ownPassword, ownReveal)
 }
 
-// Back and Cancel on the set screen: the unlocked copy is still there to save.
 function leaveRelock() {
   clearOwnPassword()
   show('done')
@@ -299,10 +293,10 @@ function finishLock(pdf: Uint8Array) {
   pending = window.setTimeout(() => show('done'), reducedMotion.matches ? 0 : 500)
 }
 
-function setReveal(on: boolean) {
-  password.type = on ? 'text' : 'password'
-  reveal.setAttribute('aria-label', on ? 'Hide password' : 'Show password')
-  reveal.setAttribute('aria-pressed', String(on))
+function setReveal(on: boolean, input = password, button = reveal) {
+  input.type = on ? 'text' : 'password'
+  button.setAttribute('aria-label', on ? 'Hide password' : 'Show password')
+  button.setAttribute('aria-pressed', String(on))
 }
 
 function toast(text: string) {
@@ -338,19 +332,18 @@ addPassword.addEventListener('click', askOwnPassword)
 
 relockForm.addEventListener('submit', (event) => {
   event.preventDefault()
-  if (!unlocked || !ownPassword.value) return
   lockSubmit.disabled = true
   locking = true
   step = 2
-  setBusy('lock', unlocked.name)
+  setBusy('lock', unlocked!.name)
   startWorker()
   wait()
-  send({ type: 'lock', file: unlocked, password: ownPassword.value })
+  send({ type: 'lock', file: unlocked!, password: ownPassword.value })
   ownPassword.value = ''
 })
 
 ownPassword.addEventListener('input', () => (lockSubmit.disabled = !ownPassword.value))
-ownReveal.addEventListener('click', () => setOwnReveal(ownPassword.type === 'password'))
+ownReveal.addEventListener('click', () => setReveal(ownPassword.type === 'password', ownPassword, ownReveal))
 byId('relock-cancel').addEventListener('click', leaveRelock)
 byId('back').addEventListener('click', () => (current === 'relock' ? leaveRelock() : reset()))
 

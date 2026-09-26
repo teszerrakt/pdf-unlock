@@ -63,19 +63,20 @@ export async function unlock(create: CreateQpdf, input: Uint8Array, password: st
   return unreadable(errors)
 }
 
-// Puts an own password on an unlocked copy: AES-256, the same password to open it and to own it,
-// no restrictions. The named flags keep a password that starts with "--" from reading as a flag.
-export async function lock(create: CreateQpdf, input: Uint8Array, password: string): Promise<Uint8Array> {
+// The locked copy, or why qpdf could not make it.
+export type LockResult = { type: 'locked'; pdf: Uint8Array } | Extract<Outcome, { type: 'unreadable' }>
+
+// The named flags keep an own password that starts with "--" from reading as a flag.
+export async function lock(create: CreateQpdf, input: Uint8Array, password: string): Promise<LockResult> {
   // An empty open password would give a copy that opens without one.
   if (!password) throw new Error('An own password cannot be empty')
   const args = ['--encrypt', `--user-password=${password}`, `--owner-password=${password}`, '--bits=256', '--']
   const { errors, output } = await run(create, input, [...args, '/in.pdf', '/out.pdf'])
-  if (!output) throw new Error(errors || 'qpdf could not lock the copy')
-  return output
+  return output ? { type: 'locked', pdf: output } : unreadable(errors)
 }
 
 // qpdf prefixes messages with "<program>: /in.pdf: ".
-function unreadable(errors: string): Outcome {
+function unreadable(errors: string): Extract<Outcome, { type: 'unreadable' }> {
   const detail = errors.split('\n')[0]?.replace(/^.*?\/in\.pdf:\s*/, '').trim()
   const message = detail ? `This file could not be read as a PDF (${detail}).` : 'This file could not be read as a PDF.'
   return { type: 'unreadable', message }
