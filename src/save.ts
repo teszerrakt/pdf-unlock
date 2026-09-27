@@ -34,9 +34,17 @@ const list = (words: string[]) => words.slice(0, -1).join(', ') + (words.length 
 
 const doing: Record<Restriction, string> = { print: 'printing', copy: 'copying', edit: 'editing' }
 
+const doneLedes = {
+  locked: 'Opens only with the password you set. Printing and copying stay allowed.',
+  'lock-failed': 'The password couldn’t be added on this device. Your unlocked copy is still here.',
+}
+
 // `saved`: bytes the repack took off an input `of` bytes long. It is named at 5% of `of`.
 // `removed`: the restrictions the locked PDF had, in the order Sphynx names them.
-export function doneText(fileName: string, hadPassword: boolean, saved = 0, { of = 0, password, form, removed = [] }: DoneOptions = {}) {
+export function doneText(copy: keyof typeof doneLedes): string
+export function doneText(fileName: string, hadPassword: boolean, saved?: number, options?: DoneOptions): string
+export function doneText(fileName: string, hadPassword?: boolean, saved = 0, { of = 0, password, form, removed = [] }: DoneOptions = {}) {
+  if (hadPassword === undefined) return doneLedes[fileName as keyof typeof doneLedes]
   const smaller = saved >= 50_000 && saved * 20 >= of ? formatSize(saved) : null
   const written = form ? ` Your password worked written as ${password} (${formName(form)}).` : ''
   if (hadPassword) {
@@ -45,4 +53,9 @@ export function doneText(fileName: string, hadPassword: boolean, saved = 0, { of
   }
   const limits = removed.length ? `limits on ${list(removed.map((restriction) => doing[restriction]))}` : 'restrictions'
   return `${fileName} had no open password, only ${limits}. This copy has none${smaller ? `, and is ${smaller} smaller` : ''}.`
+}
+
+// `storeZip` throws a RangeError past what one zip holds.
+export function zipFailed(error: unknown): { text: string; ms: number } | null {
+  return error instanceof RangeError ? { text: 'Too big for one zip. Save them one by one.', ms: 4000 } : null
 }

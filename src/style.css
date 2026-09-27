@@ -200,6 +200,12 @@ svg {
 .cat-5 {
   --art: url('/art/cat-5.webp');
 }
+.cat-6 {
+  --art: url('/art/cat-6.webp');
+}
+.cat-7 {
+  --art: url('/art/cat-7.webp');
+}
 
 .cat {
   display: block;

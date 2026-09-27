@@ -33,11 +33,15 @@ function setup() {
     const from = worker
     setTimeout(() => attempt.answer(from, response), after)
   }
+  const crash = (after = 0) => {
+    const from = worker
+    setTimeout(() => attempt.crashed(from), after)
+  }
   const now = () => Date.now() - start
   const called = (name: keyof Ui) => calls.filter((call) => call.name === name)
   const shown = () => called('show').map(({ at, args: [view] }) => [view as View, at] as const)
   const steps = () => called('steps').map(({ at, args: [n] }) => [n as number, at] as const)
-  return { attempt, answer, now, calls, called, shown, steps, sent }
+  return { attempt, answer, crash, now, calls, called, shown, steps, sent }
 }
 
 const pdf = (name = 'statement.pdf') => new File([new Uint8Array(1000)], name, { type: 'application/pdf' })
@@ -266,4 +270,31 @@ test('an attempt abandoned by picking another file while its counts wait their t
 
   expect(since(harness, shown)).toEqual([])
   expect(called('unlocked')).toEqual([])
+})
+
+const lockFailures = [
+  ['a thrown lock', (harness: ReturnType<typeof setup>) => harness.answer({ type: 'unreadable', message: '' }, 10)],
+  ['a worker error', (harness: ReturnType<typeof setup>) => harness.crash(10)],
+] as const
+const lockFailureCases = lockFailures.flatMap(([how, fail]) => [
+  { how, fail, when: 'on the Locking screen', wait: 300, moves: [['relock', 'fwd'], ['busy', 'fwd'], ['done', 'back']] },
+  { how, fail, when: 'before the Locking screen shows', wait: 0, moves: [['relock', 'fwd'], ['done', 'back']] },
+])
+
+test.each(lockFailureCases)('a lock that fails with $how $when slides back to Done with its unlocked copy, never to a stop', ({ fail, wait, moves }) => {
+  const harness = setup()
+  const { attempt, now, called } = harness
+  toDone(harness)
+  attempt.addPassword()
+  const start = now()
+  attempt.lock(pdf('form-unlocked.pdf'), 'hunter2')
+  vi.advanceTimersByTime(wait)
+  fail(harness)
+  vi.runAllTimers()
+
+  expect(called('stop')).toEqual([])
+  expect(called('locked')).toEqual([])
+  expect(called('lockFailed')).toHaveLength(1)
+  expect(called('show').filter(({ at }) => at >= start).map(({ args }) => args)).toEqual(moves)
+  expect(attempt.locking).toBe(false)
 })

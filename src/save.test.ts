@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { doneText, saveAllChoice, saveChoice } from './save'
+import { doneText, saveAllChoice, saveChoice, zipFailed } from './save'
 
 describe('saveChoice', () => {
   it('offers only "Save or share" on iOS, where a download opens a viewer instead of saving', () => {
@@ -95,6 +95,14 @@ describe('doneText', () => {
     )
   })
 
+  it('says a locked copy opens only with the own password', () => {
+    expect(doneText('locked')).toBe('Opens only with the password you set. Printing and copying stay allowed.')
+  })
+
+  it('says the unlocked copy is still here when its lock failed', () => {
+    expect(doneText('lock-failed')).toBe('The password couldn’t be added on this device. Your unlocked copy is still here.')
+  })
+
   it('mentions a saving of exactly 50 KB and 5% of the input', () => {
     expect(doneText('statement.pdf', true, 50_000, { of: 1_000_000 })).toBe(
       'This copy opens anywhere, no password needed. It’s also 50 KB smaller.',
@@ -117,5 +125,18 @@ describe('saveAllChoice', () => {
 
   it('offers neither when nothing was unlocked', () => {
     expect(saveAllChoice(0, true, false)).toMatchObject({ share: false, download: false })
+  })
+})
+
+describe('zipFailed', () => {
+  it('says Save all’s zip is too big for 4 s when the zip step throws its RangeError', () => {
+    expect(zipFailed(new RangeError('Too many or too large files for one zip.'))).toEqual({
+      text: 'Too big for one zip. Save them one by one.',
+      ms: 4000,
+    })
+  })
+
+  it('says nothing for any other error', () => {
+    expect(zipFailed(new TypeError('Failed to fetch'))).toBeNull()
   })
 })

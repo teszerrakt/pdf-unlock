@@ -8,7 +8,7 @@ import { SHARE_ACTION, SHARE_CACHE, SHARED_AT_HEADER, SHARED_FILE, SHARED_NAME_H
 import { cardLine, formatSize, isPdf, lockedName, uniqueNames, unlockedName } from './file'
 import { browserName, isIos as detectIos, modifierKey, type Brand } from './platform'
 import { tryingText, wrongText } from './dates'
-import { doneText, saveAllChoice, saveChoice } from './save'
+import { doneText, saveAllChoice, saveChoice, zipFailed } from './save'
 import { rowText, type RowState, type Summary } from './batch'
 import { createAttempt, views, type Prompt, type Stop, type Unlocked, type View } from './attempt'
 import { storeZip } from './zip'
@@ -218,6 +218,8 @@ function setDoneLocked(on: boolean) {
   byId('done-title').textContent = on ? 'Locked.' : 'Unlocked.'
   byId('done-badge-open').hidden = on
   byId('done-badge-locked').hidden = !on
+  byId('done-art').classList.toggle('cat-3', !on)
+  byId('done-art').classList.toggle('cat-6', on)
   addPassword.hidden = on
 }
 
@@ -240,7 +242,7 @@ function showLocked(pdf: Uint8Array) {
   const name = lockedName(unlocked!.name)
   offer(new File([pdf as BlobPart], name, { type: 'application/pdf' }))
   setDoneLocked(true)
-  byId('done-text').textContent = 'Opens only with the password you set. Printing and copying stay allowed.'
+  byId('done-text').textContent = doneText('locked')
   byId('done-name').textContent = name
   byId('done-info').textContent = cardLine(pdf.length, pages, true)
 }
@@ -251,12 +253,12 @@ function setReveal(on: boolean, input = password, button = reveal) {
   button.setAttribute('aria-pressed', String(on))
 }
 
-function toast(text: string) {
+function toast(text: string, ms = 1800) {
   byId('toast-text').textContent = text
   toastBox.hidden = false
   replay(toastBox, 'toast')
   clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => (toastBox.hidden = true), 1800)
+  toastTimer = window.setTimeout(() => (toastBox.hidden = true), ms)
 }
 
 function startBatch(files: File[], states: RowState[]) {
@@ -295,6 +297,8 @@ function finishBatch({ title, lede, unlocked: count }: Summary, states: RowState
   const choice = saveAllChoice(count, !!count && !!navigator.canShare?.({ files: unlockedCopies(run.copies) }), isIos)
   byId('batch-done-title').textContent = title
   byId('batch-done-text').textContent = lede
+  byId('batch-done-art').classList.toggle('cat-3', !count)
+  byId('batch-done-art').classList.toggle('cat-7', !!count)
   byId('batch-done-rows').replaceChildren(
     ...run.picked.map((name, i) => {
       const state = states[i]
@@ -350,6 +354,10 @@ const attempt = createAttempt(
     stop,
     clear,
     leftRelock: clearOwnPassword,
+    lockFailed() {
+      clearOwnPassword()
+      byId('done-text').textContent = doneText('lock-failed')
+    },
     batch: startBatch,
     rows: paint,
     copy(index, { pdf }) {
@@ -418,7 +426,15 @@ saveAll.addEventListener('click', async () => {
   if (!run) return
   const files = await Promise.all(unlockedCopies(run.copies).map(async (copy) => ({ name: copy.name, bytes: new Uint8Array(await copy.arrayBuffer()) })))
   if (batch !== run) return
-  const url = URL.createObjectURL(new Blob([storeZip(files) as BlobPart], { type: 'application/zip' }))
+  let zip: Uint8Array
+  try {
+    zip = storeZip(files)
+  } catch (error) {
+    const failed = zipFailed(error)
+    if (!failed) throw error
+    return toast(failed.text, failed.ms)
+  }
+  const url = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' }))
   run.urls.push(url)
   Object.assign(document.createElement('a'), { href: url, download: 'unlocked.zip' }).click()
   toast('Download started')
@@ -508,7 +524,7 @@ async function takeSharedFile() {
   if (location.pathname === SHARE_ACTION) {
     const detail = location.search || 'no data'
     history.replaceState(null, '', '/')
-    return attempt.fail(`The share opened without its file (${detail}). Use Choose a PDF instead.`)
+    return attempt.fail(`The share opened without its file (${detail}). Use Choose PDFs instead.`)
   }
   if (!('caches' in window)) return
   const params = new URLSearchParams(location.search)
@@ -523,7 +539,7 @@ async function takeSharedFile() {
   }
   await caches.delete(SHARE_CACHE)
   if (!response) {
-    return attempt.fail('Your browser did not pass the shared file to the app. Use Choose a PDF instead.')
+    return attempt.fail('Your browser did not pass the shared file to the app. Use Choose PDFs instead.')
   }
   const name = decodeURIComponent(response.headers.get(SHARED_NAME_HEADER) ?? 'shared.pdf')
   attempt.open([new File([await response.blob()], name, { type: 'application/pdf' })])
