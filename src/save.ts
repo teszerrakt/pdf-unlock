@@ -1,5 +1,6 @@
 import { formName, type Form } from './dates'
 import { formatSize } from './file'
+import type { Restriction } from './unlock'
 
 // How the done screen offers the unlocked copy.
 export type SaveChoice = {
@@ -26,12 +27,22 @@ export function saveAllChoice(count: number, canShare: boolean, ios: boolean) {
   return { share: !!count && share, download: !!count && download, shareLabel: `${shareLabel} all` as const, primary }
 }
 
-export type DoneOptions = { of?: number; password?: string | null; form?: Form | null }
+export type DoneOptions = { of?: number; password?: string | null; form?: Form | null; removed?: Restriction[] }
+
+// "print", "print and copy", "print, copy and edit".
+const list = (words: string[]) => words.slice(0, -1).join(', ') + (words.length > 1 ? ' and ' : '') + words.at(-1)
+
+const doing: Record<Restriction, string> = { print: 'printing', copy: 'copying', edit: 'editing' }
 
 // `saved`: bytes the repack took off an input `of` bytes long. It is named at 5% of `of`.
-export function doneText(fileName: string, hadPassword: boolean, saved = 0, { of = 0, password, form }: DoneOptions = {}) {
+// `removed`: the restrictions the locked PDF had, in the order Sphynx names them.
+export function doneText(fileName: string, hadPassword: boolean, saved = 0, { of = 0, password, form, removed = [] }: DoneOptions = {}) {
   const smaller = saved >= 50_000 && saved * 20 >= of ? formatSize(saved) : null
   const written = form ? ` Your password worked written as ${password} (${formName(form)}).` : ''
-  if (hadPassword) return `This copy opens anywhere, no password needed.${smaller ? ` It’s also ${smaller} smaller.` : ''}${written}`
-  return `${fileName} had no open password, only print or copy limits. This copy has none${smaller ? `, and is ${smaller} smaller` : ''}.`
+  if (hadPassword) {
+    const gone = removed.length ? ` The ${list(removed)} ${removed.length > 1 ? 'limits are' : 'limit is'} gone too.` : ''
+    return `This copy opens anywhere, no password needed.${gone}${smaller ? ` It’s also ${smaller} smaller.` : ''}${written}`
+  }
+  const limits = removed.length ? `limits on ${list(removed.map((restriction) => doing[restriction]))}` : 'restrictions'
+  return `${fileName} had no open password, only ${limits}. This copy has none${smaller ? `, and is ${smaller} smaller` : ''}.`
 }

@@ -36,6 +36,24 @@ test('bloated locked PDF: the Done text names the saving and the unlocked copy i
   expect((await downloadUnlockedCopy(page)).pdf.length).toBeLessThan(pdf.length)
 })
 
+test('12-page locked PDF on a phone: the Done card line shows the page count in full beside Add password', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }, plainPdf({ pages: 12 })))
+  await enterPassword(page, 'secret')
+  await expect(screen(page, 'done')).toBeVisible()
+  const line = page.locator('#done-info')
+  await expect(line).toHaveText(/^\d+ KB · 12 pages$/)
+  await expect(page.getByRole('button', { name: 'Add password', exact: true })).toBeVisible()
+  const { scrollWidth, clientWidth } = await line.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }))
+  expect(scrollWidth, 'the card line is cut off').toBeLessThanOrEqual(clientWidth)
+})
+
+test('locked PDF with an open password and a print limit: the Done text names the print limit', async ({ page }) => {
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret', restrictions: ['print'] }))
+  await enterPassword(page, 'secret')
+  await expect(page.locator('#done-text')).toHaveText('This copy opens anywhere, no password needed. The print limit is gone too.')
+})
+
 test('wrong password: the prompt is marked wrong until the user types again', async ({ page }) => {
   await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
   await enterPassword(page, 'nope')
@@ -91,7 +109,9 @@ test('the promise: uses only the password you type, and its date forms', async (
 test('restricted PDF: unlocked with no password prompt', async ({ page }) => {
   await pickFile(page, 'form.pdf', await restrictedPdf())
   await expect(screen(page, 'done')).toBeVisible()
-  await expect(page.locator('#done-text')).toHaveText('form.pdf had no open password, only print or copy limits. This copy has none.')
+  await expect(page.locator('#done-text')).toHaveText(
+    'form.pdf had no open password, only limits on printing, copying and editing. This copy has none.',
+  )
   expect((await downloadUnlockedCopy(page)).name).toBe('form-unlocked.pdf')
 })
 
@@ -441,7 +461,7 @@ test.describe('own password', () => {
     await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
     await expect(page.locator('#done-text')).toHaveText('Opens only with the password you set. Printing and copying stay allowed.')
     await expect(page.locator('#done-name')).toHaveText('statement-locked.pdf')
-    await expect(page.locator('#done-info')).toHaveText(/^\d+ KB · Your password$/)
+    await expect(page.locator('#done-info')).toHaveText(/^\d+ KB · 1 page · Your password$/)
     await expect(page.locator('#done-badge-locked')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Add password', exact: true })).toBeHidden()
     const copy = await downloadCopy(page)

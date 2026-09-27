@@ -20,9 +20,38 @@ describe('doneText', () => {
     expect(doneText('statement.pdf', true)).toBe('This copy opens anywhere, no password needed.')
   })
 
-  it('names the restrictions it removed from a restricted PDF', () => {
-    expect(doneText('statement.pdf', false)).toBe(
-      'statement.pdf had no open password, only print or copy limits. This copy has none.',
+  it.each([
+    [['print'], 'The print limit is gone too.'],
+    [['print', 'copy'], 'The print and copy limits are gone too.'],
+    [['print', 'copy', 'edit'], 'The print, copy and edit limits are gone too.'],
+  ] as const)('names the restrictions %j removed along with the open password', (removed, sentence) => {
+    expect(doneText('statement.pdf', true, 0, { removed: [...removed] })).toBe(`This copy opens anywhere, no password needed. ${sentence}`)
+  })
+
+  it.each([
+    [['print'], 'printing'],
+    [['copy', 'edit'], 'copying and editing'],
+    [['print', 'copy'], 'printing and copying'],
+    [['print', 'copy', 'edit'], 'printing, copying and editing'],
+  ] as const)('names the restrictions %j it removed from a restricted PDF', (removed, list) => {
+    expect(doneText('form.pdf', false, 0, { removed: [...removed] })).toBe(
+      `form.pdf had no open password, only limits on ${list}. This copy has none.`,
+    )
+  })
+
+  it('says only restrictions for a restricted PDF with none it names', () => {
+    expect(doneText('form.pdf', false)).toBe('form.pdf had no open password, only restrictions. This copy has none.')
+  })
+
+  it('names the saving from the repack after the restrictions removed along with the open password', () => {
+    expect(doneText('statement.pdf', true, 2_200_000, { removed: ['print', 'copy'] })).toBe(
+      'This copy opens anywhere, no password needed. The print and copy limits are gone too. It’s also 2.2 MB smaller.',
+    )
+  })
+
+  it('names the restrictions, then the saving, then the date form', () => {
+    expect(doneText('statement.pdf', true, 2_200_000, { removed: ['edit'], password: '900805', form: 'YYMMDD' })).toBe(
+      'This copy opens anywhere, no password needed. The edit limit is gone too. It’s also 2.2 MB smaller. Your password worked written as 900805 (year-month-day, short year).',
     )
   })
 
@@ -33,8 +62,8 @@ describe('doneText', () => {
   })
 
   it('adds the saving from the repack to the restrictions it removed', () => {
-    expect(doneText('form.pdf', false, 2_200_000)).toBe(
-      'form.pdf had no open password, only print or copy limits. This copy has none, and is 2.2 MB smaller.',
+    expect(doneText('form.pdf', false, 2_200_000, { removed: ['print', 'copy', 'edit'] })).toBe(
+      'form.pdf had no open password, only limits on printing, copying and editing. This copy has none, and is 2.2 MB smaller.',
     )
   })
 
@@ -44,7 +73,7 @@ describe('doneText', () => {
   ])('leaves the saving out when it is %s', (_, saved, options) => {
     expect(doneText('statement.pdf', true, saved, options)).toBe('This copy opens anywhere, no password needed.')
     expect(doneText('form.pdf', false, saved, options)).toBe(
-      'form.pdf had no open password, only print or copy limits. This copy has none.',
+      'form.pdf had no open password, only restrictions. This copy has none.',
     )
   })
 

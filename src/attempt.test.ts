@@ -41,7 +41,7 @@ function setup() {
 }
 
 const pdf = (name = 'statement.pdf') => new File([new Uint8Array(1000)], name, { type: 'application/pdf' })
-const unlocked: WorkerResponse = { type: 'unlocked', pdf: new Uint8Array(900), hadPassword: true, password: 'secret', form: null }
+const unlocked: WorkerResponse = { type: 'unlocked', pdf: new Uint8Array(900), hadPassword: true, password: 'secret', form: null, pages: 1, removed: [] }
 const doneAt = (shown: readonly (readonly [View, number])[]) => shown.find(([view]) => view === 'done')?.[1]
 const gaps = (ticks: readonly (readonly [number, number])[]) => ticks.slice(1).map(([, at], i) => at - ticks[i][1])
 

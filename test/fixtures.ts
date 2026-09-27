@@ -3,18 +3,24 @@
 // Real-world files that qpdf did not make live in test/fixtures/ (see its README).
 import { readFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
+import type { Restriction } from '../src/unlock'
 import { qpdf } from './qpdf'
 
-// One page that says "Sphynx fixture". The wasm build of qpdf cannot repair a bad xref, so it is computed.
-// `image` is a stream object drawn as /Im1, its data one byte per character.
-function source(content = 'BT /F1 24 Tf 20 60 Td (Sphynx fixture) Tj ET', image?: string) {
+// Pages that say "Sphynx fixture". The wasm build of qpdf cannot repair a bad xref, so it is computed.
+// `image` is a stream object drawn as /Im1, its data one byte per character. Every page draws the same
+// content; the pages after the first are appended, so a one-page source stays as it was.
+function source(content = 'BT /F1 24 Tf 20 60 Td (Sphynx fixture) Tj ET', image?: string, pages = 1) {
+  const page = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >>${image ? ' /XObject << /Im1 6 0 R >>' : ''} >> >>`
+  const first = image ? 7 : 6
+  const kids = [3, ...Array.from({ length: pages - 1 }, (_, i) => first + i)]
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >>${image ? ' /XObject << /Im1 6 0 R >>' : ''} >> >>`,
+    `<< /Type /Pages /Kids [${kids.map((n) => `${n} 0 R`).join(' ')}] /Count ${pages} >>`,
+    page,
     `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
     ...(image ? [image] : []),
+    ...kids.slice(1).map(() => page),
   ]
   let pdf = '%PDF-1.7\n'
   const offsets = objects.map((body, i) => {
@@ -30,7 +36,7 @@ function source(content = 'BT /F1 24 Tf 20 60 Td (Sphynx fixture) Tj ET', image?
 }
 
 // A PDF that is not locked.
-export const plainPdf = () => source()
+export const plainPdf = ({ pages = 1 }: { pages?: number } = {}) => source(undefined, undefined, pages)
 
 type Lock = {
   // Omit or leave empty for a restricted PDF.
@@ -38,11 +44,18 @@ type Lock = {
   ownerPassword?: string
   // 40 is RC4 and needs qpdf's weak-crypto flag; 128 is AES-128; 256 is AES-256.
   bits?: 40 | 128 | 256
+  // What the owner password refuses. Omit for all three on a restricted PDF, none with an open password.
+  restrictions?: Restriction[]
 }
 
+const refuse: Record<Restriction, string> = { print: '--print=none', copy: '--extract=n', edit: '--modify=none' }
+
 // A locked PDF: an open password, restrictions, or both.
-export async function lockedPdf({ openPassword = '', ownerPassword = 'owner', bits = 256 }: Lock = {}, pdf = plainPdf(), write: string[] = []) {
-  const restrictions = openPassword ? [] : ['--print=none', '--extract=n', '--modify=none']
+export async function lockedPdf(
+  { openPassword = '', ownerPassword = 'owner', bits = 256, restrictions = openPassword ? [] : ['print', 'copy', 'edit'] }: Lock = {},
+  pdf = plainPdf(),
+  write: string[] = [],
+) {
   const args = [
     ...write,
     ...(bits === 40 ? ['--allow-weak-crypto'] : []),
@@ -51,7 +64,7 @@ export async function lockedPdf({ openPassword = '', ownerPassword = 'owner', bi
     `--owner-password=${ownerPassword}`,
     `--bits=${bits}`,
     ...(bits === 128 ? ['--use-aes=y'] : []),
-    ...restrictions,
+    ...restrictions.map((restriction) => refuse[restriction]),
     '--',
     '/in.pdf',
     '/out.pdf',

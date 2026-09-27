@@ -11,9 +11,21 @@ import type { Candidate, Form } from './dates'
 // Loads a fresh qpdf instance. The browser passes the wasm URL, Node passes the wasm bytes.
 export type CreateQpdf = () => Promise<Qpdf>
 
-// How an attempt ends (see CONTEXT.md).
+// The restrictions Sphynx names, in the order it names them.
+export type Restriction = 'print' | 'copy' | 'edit'
+
+// How an attempt ends (see CONTEXT.md). `pages`: the unlocked copy's page count, null when qpdf could
+// not count them. `removed`: the restrictions the locked PDF had.
 export type Outcome =
-  | { type: 'unlocked'; pdf: Uint8Array; hadPassword: boolean; password: string | null; form: Form | null }
+  | {
+      type: 'unlocked'
+      pdf: Uint8Array
+      hadPassword: boolean
+      password: string | null
+      form: Form | null
+      pages: number | null
+      removed: Restriction[]
+    }
   | { type: 'not-locked' }
   | { type: 'unreadable'; message: string }
 
@@ -25,22 +37,25 @@ const isPasswordError = (message: string) => /invalid password/i.test(message)
 
 // A fresh instance per run: qpdf cannot be re-entered after it throws, and no memory outlives the run.
 async function run(create: CreateQpdf, input: Uint8Array, args: string[]) {
+  const stdout: string[] = []
   const stderr: string[] = []
-  // qpdf binds console.error when instantiated, so swapping it in for that moment routes its stderr here.
-  const original = console.error
+  // qpdf binds console.log and console.error when instantiated, so swapping them in for that moment
+  // routes its stdout and stderr here.
+  const original = { log: console.log, error: console.error }
+  console.log = (...parts: unknown[]) => void stdout.push(parts.join(' '))
   console.error = (...parts: unknown[]) => void stderr.push(parts.join(' '))
   let q: Qpdf
   try {
     q = await create()
   } finally {
-    console.error = original
+    Object.assign(console, original)
   }
   q.FS.writeFile('/in.pdf', input)
   const code = q.callMain(args)
   const ok = code === 0 || code === 3 // 3 = succeeded with warnings
   const errors = stderr.filter((line) => !line.includes('WARNING')).join('\n')
   const output = ok && args.includes('/out.pdf') ? q.FS.readFile('/out.pdf') : undefined
-  return { code, errors, output }
+  return { code, ok, errors, output, stdout: stdout.join('\n') }
 }
 
 // Opens a file. A restricted PDF has no password prompt, so it is unlocked straight away;
@@ -91,9 +106,33 @@ async function decryptWith(create: CreateQpdf, input: Uint8Array, password: stri
   }
   // A file the repack run fails on gets the plain decrypt; a wrong password would fail that too.
   else if (!isPasswordError(errors)) ({ errors, output } = await decrypt())
-  if (output) return { type: 'unlocked', pdf: output, hadPassword: password !== null, password, form: null }
+  if (output) {
+    const read = await inspect(create, input, output, args)
+    return { type: 'unlocked', pdf: output, hadPassword: password !== null, password, form: null, ...read }
+  }
   if (isPasswordError(errors)) return { type: password === null ? 'needs-password' : 'wrong-password' }
   return unreadable(errors)
+}
+
+// How qpdf --show-encryption says each restriction is set.
+const refused: [Restriction, RegExp][] = [
+  ['print', /^print (low|high) resolution: not allowed$/m],
+  ['copy', /^extract for any purpose: not allowed$/m],
+  ['edit', /^modify anything: not allowed$/m],
+]
+
+// Reads what Done shows about the unlocked copy: its page count, which needs no password, and the
+// restrictions the input had, read with the password that opened it. Neither is worth failing an
+// unlock over, so a run that fails or throws leaves its part out.
+async function inspect(create: CreateQpdf, input: Uint8Array, output: Uint8Array, password: string[]) {
+  const failed = { ok: false, stdout: '' }
+  const npages = await run(create, output, ['--show-npages', '/in.pdf']).catch(() => failed)
+  const encryption = await run(create, input, [...password, '--show-encryption', '/in.pdf']).catch(() => failed)
+  const pages = npages.ok ? Number.parseInt(npages.stdout, 10) : NaN
+  return {
+    pages: Number.isInteger(pages) ? pages : null,
+    removed: encryption.ok ? refused.filter(([, line]) => line.test(encryption.stdout)).map(([restriction]) => restriction) : [],
+  }
 }
 
 // AES-256 takes at most 127 UTF-8 bytes of password; qpdf writes a longer one into a copy that
