@@ -56,6 +56,11 @@ describe('dateForms', () => {
     expect(list.length).toBeLessThanOrEqual(20)
   })
 
+  it.each(['\t05081990', ' 05/08/1990\n'])('given %j, builds the date forms from the trimmed text, after it', (typed) => {
+    expect(passwords(typed)).toEqual([typed, typed.trim(), ...passwords(typed.trim()).slice(1)])
+    expect(passwords(typed).length).toBeGreaterThan(2)
+  })
+
   it('trims a line break pasted with the password', () => {
     expect(passwords('\tsphynx\r\n')).toEqual(['\tsphynx\r\n', 'sphynx'])
   })

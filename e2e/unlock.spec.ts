@@ -140,8 +140,20 @@ test.describe('Caps Lock hint', () => {
     const hint = page.locator('#caps-lock')
     await expect(wrong).toBeVisible()
     await expect(hint).toBeVisible()
-    const error = (await wrong.boundingBox())!
-    expect((await hint.boundingBox())!.y).toBeGreaterThanOrEqual(error.y + error.height)
+    // Both boxes in one frame: the prompt's entrance moves the whole field while it plays.
+    const [errorBottom, hintTop] = await page.evaluate(() => [
+      document.getElementById('wrong')!.getBoundingClientRect().bottom,
+      document.getElementById('caps-lock')!.getBoundingClientRect().top,
+    ])
+    expect(hintTop).toBeGreaterThanOrEqual(errorBottom)
+  })
+
+  test('Caps Lock turned off while the field is away: the wrong-password prompt comes back with no hint', async ({ page }) => {
+    await press(page, true)
+    await enterPassword(page, 'nope')
+    await page.locator('body').dispatchEvent('keyup', { key: 'CapsLock', modifierCapsLock: false })
+    await expect(page.locator('#wrong')).toBeVisible()
+    await expect(page.locator('#caps-lock')).toBeHidden()
   })
 
   test('a new password prompt hides the hint', async ({ page }) => {
