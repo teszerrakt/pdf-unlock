@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dateForms, formName, tryingText, wrongText } from './dates'
+import { dateForms, datesTried, formName, tryingText, wrongText } from './dates'
 
 const today = new Date(2026, 8, 26)
 const passwords = (typed: string) => dateForms(typed, today).map(({ password }) => password)
@@ -17,16 +17,54 @@ describe('dateForms', () => {
     expect(passwords(typed)).toEqual(expected)
   })
 
-  it('given any 6 or 8 digit input, lists at most 20 passwords and no duplicates', () => {
+  it('given any 6 or 8 digit input, with or without spaces around it, lists at most 20 passwords and no duplicates', () => {
     const inputs = [
       ...Array.from({ length: 1_000_000 / 7 }, (_, i) => String(i * 7).padStart(6, '0')),
       ...Array.from({ length: 100_000_000 / 7919 }, (_, i) => String(i * 7919).padStart(8, '0')),
     ]
-    for (const typed of inputs) {
+    for (const typed of [...inputs, ...inputs.map((text) => ` ${text}\n`)]) {
       const list = passwords(typed)
       expect(list.length).toBeLessThanOrEqual(20)
       expect(new Set(list).size).toBe(list.length)
     }
+  })
+
+  it('given a password with spaces around it, tries the trimmed text right after the exact text, and no date forms', () => {
+    expect(dateForms(' sphynx ', today)).toEqual([
+      { password: ' sphynx ', form: null, trimmed: false },
+      { password: 'sphynx', form: null, trimmed: true },
+    ])
+  })
+
+  it('given a date with spaces around it, tries the trimmed text second and its date forms after, 20 at most', () => {
+    const list = dateForms(' 12/03/1988 ', today)
+    expect(list.slice(0, 2)).toEqual([
+      { password: ' 12/03/1988 ', form: null, trimmed: false },
+      { password: '12/03/1988', form: null, trimmed: true },
+    ])
+    expect(list.slice(2)).toEqual(dateForms('12/03/1988', today).slice(1))
+    expect(list.length).toBeGreaterThan(2)
+    expect(list.length).toBeLessThanOrEqual(20)
+  })
+
+  it('trims a line break pasted with the password', () => {
+    expect(passwords('\tsphynx\r\n')).toEqual(['\tsphynx\r\n', 'sphynx'])
+  })
+
+  it('tries no empty password when only spaces were typed', () => {
+    expect(passwords('   ')).toEqual(['   '])
+  })
+
+  it('given a password with no spaces around it, marks no candidate trimmed', () => {
+    expect(dateForms('05/08/90', today).some(({ trimmed }) => trimmed)).toBe(false)
+  })
+})
+
+describe('datesTried', () => {
+  it('counts the date forms, not the exact or the trimmed text', () => {
+    expect(datesTried(dateForms(' sphynx ', today))).toBe(0)
+    expect(datesTried(dateForms(' 050890 ', today))).toBe(7)
+    expect(datesTried(dateForms('050890', today))).toBe(7)
   })
 })
 

@@ -22,6 +22,7 @@ const password = byId<HTMLInputElement>('password')
 const field = byId('field')
 const reveal = byId<HTMLButtonElement>('reveal')
 const wrong = byId('wrong')
+const capsLock = byId('caps-lock')
 const submit = byId<HTMLButtonElement>('submit')
 const unlockCat = byId('unlock-cat')
 const download = byId<HTMLAnchorElement>('download')
@@ -158,6 +159,7 @@ function askPassword(asked: Prompt) {
   if (!asked.wrong) {
     password.value = ''
     setWrong(false)
+    capsLock.hidden = true
   }
   if (asked.batch) byId('counter').textContent = `${asked.batch.at + 1} of ${asked.batch.of}`
   byId('remember-row').hidden = !asked.batch
@@ -185,7 +187,7 @@ function markWrong() {
   replay(byId('unlock-cat-wrap'), 'swap')
 }
 
-function showUnlocked({ pdf, hadPassword, password: worked, form, pages, removed }: Unlocked, file: { name: string; size: number }) {
+function showUnlocked({ pdf, hadPassword, password: worked, form, trimmed, pages, removed }: Unlocked, file: { name: string; size: number }) {
   password.value = ''
   const name = unlockedName(file.name)
   unlocked = new File([pdf as BlobPart], name, { type: 'application/pdf' })
@@ -193,7 +195,7 @@ function showUnlocked({ pdf, hadPassword, password: worked, form, pages, removed
   setDoneLocked(false)
   byId('done-name').textContent = name
   byId('done-info').textContent = cardLine(unlocked.size, pages)
-  byId('done-text').textContent = doneText(file.name, hadPassword, file.size - unlocked.size, { of: file.size, password: worked, form, removed })
+  byId('done-text').textContent = doneText(file.name, hadPassword, file.size - unlocked.size, { of: file.size, password: worked, form, trimmed, removed })
 }
 
 function offer(file: File) {
@@ -392,6 +394,14 @@ password.addEventListener('input', () => {
   setWrong(false)
   replay(byId('unlock-cat-wrap'), 'swap')
 })
+
+// Caps Lock can only be read from a key event, so the hint waits for the first keystroke.
+for (const type of ['keydown', 'keyup'] as const) {
+  password.addEventListener(type, (event) => {
+    // Chrome's autofill fires a plain Event named keydown, with no modifier state.
+    if (event instanceof KeyboardEvent) capsLock.hidden = !event.getModifierState('CapsLock')
+  })
+}
 
 reveal.addEventListener('click', () => setReveal(password.type === 'password'))
 

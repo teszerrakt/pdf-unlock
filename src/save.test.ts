@@ -95,6 +95,18 @@ describe('doneText', () => {
     )
   })
 
+  it('ends by saying the password worked without the spaces around it, after the restrictions and the saving', () => {
+    expect(doneText('statement.pdf', true, 2_200_000, { removed: ['edit'], password: 'sphynx', form: null, trimmed: true })).toBe(
+      'This copy opens anywhere, no password needed. The edit limit is gone too. It’s also 2.2 MB smaller. Your password worked without the spaces around it.',
+    )
+  })
+
+  it('says nothing about spaces when the exact text worked', () => {
+    expect(doneText('statement.pdf', true, 0, { password: 'sphynx', form: null, trimmed: false })).toBe(
+      'This copy opens anywhere, no password needed.',
+    )
+  })
+
   it('says a locked copy opens only with the own password', () => {
     expect(doneText('locked')).toBe('Opens only with the password you set. Printing and copying stay allowed.')
   })

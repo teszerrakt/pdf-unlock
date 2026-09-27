@@ -27,7 +27,7 @@ export function saveAllChoice(count: number, canShare: boolean, ios: boolean) {
   return { share: !!count && share, download: !!count && download, shareLabel: `${shareLabel} all` as const, primary }
 }
 
-export type DoneOptions = { of?: number; password?: string | null; form?: Form | null; removed?: Restriction[] }
+export type DoneOptions = { of?: number; password?: string | null; form?: Form | null; trimmed?: boolean; removed?: Restriction[] }
 
 const list = (words: string[]) => new Intl.ListFormat('en-GB').format(words)
 
@@ -41,10 +41,14 @@ const doneLedes = {
 // `saved`: bytes the repack took off an input `of` bytes long. It is named at 5% of `of`.
 export function doneText(copy: keyof typeof doneLedes): string
 export function doneText(fileName: string, hadPassword: boolean, saved?: number, options?: DoneOptions): string
-export function doneText(fileName: string, hadPassword?: boolean, saved = 0, { of = 0, password, form, removed = [] }: DoneOptions = {}) {
+export function doneText(fileName: string, hadPassword?: boolean, saved = 0, { of = 0, password, form, trimmed, removed = [] }: DoneOptions = {}) {
   if (hadPassword === undefined) return doneLedes[fileName as keyof typeof doneLedes]
   const smaller = saved >= 50_000 && saved * 20 >= of ? formatSize(saved) : null
-  const written = form ? ` Your password worked written as ${password} (${formName(form)}).` : ''
+  const written = form
+    ? ` Your password worked written as ${password} (${formName(form)}).`
+    : trimmed
+      ? ' Your password worked without the spaces around it.'
+      : ''
   if (hadPassword) {
     const gone = removed.length ? ` The ${list(removed)} ${removed.length > 1 ? 'limits are' : 'limit is'} gone too.` : ''
     return `This copy opens anywhere, no password needed.${gone}${smaller ? ` It’s also ${smaller} smaller.` : ''}${written}`

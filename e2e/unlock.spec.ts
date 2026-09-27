@@ -98,6 +98,61 @@ test.describe('date forms', () => {
   })
 })
 
+test.describe('a password pasted with spaces around it', () => {
+  test('" sphynx ": the Done text ends saying the password worked without the spaces around it', async ({ page }) => {
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'sphynx' }))
+    await enterPassword(page, ' sphynx ')
+    await expect(screen(page, 'done')).toBeVisible()
+    await expect(page.locator('#done-text')).toHaveText(/ Your password worked without the spaces around it\.$/)
+    await downloadUnlockedCopy(page)
+  })
+
+  test('" SPHYNX ", wrong even trimmed and not a date: the prompt says Wrong password. Try again.', async ({ page }) => {
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'sphynx' }))
+    await enterPassword(page, ' SPHYNX ')
+    await expect(page.locator('#wrong')).toHaveText('Wrong password. Try again.')
+  })
+})
+
+test.describe('Caps Lock hint', () => {
+  const press = (page: Page, capsLock: boolean) =>
+    page.locator('#password').dispatchEvent('keydown', { key: 'a', modifierCapsLock: capsLock })
+
+  test.beforeEach(async ({ page }) => {
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+    await expect(screen(page, 'unlock')).toBeVisible()
+  })
+
+  test('a key pressed with Caps Lock on shows the hint under the field, and one with it off hides it', async ({ page }) => {
+    const hint = page.locator('#caps-lock')
+    await expect(hint).toBeHidden()
+    await press(page, true)
+    await expect(hint).toHaveText('Caps Lock is on.')
+    await expect(hint).toBeVisible()
+    await press(page, false)
+    await expect(hint).toBeHidden()
+  })
+
+  test('a wrong password with Caps Lock on: the hint sits below the error', async ({ page }) => {
+    await press(page, true)
+    await enterPassword(page, 'nope')
+    const wrong = page.locator('#wrong')
+    const hint = page.locator('#caps-lock')
+    await expect(wrong).toBeVisible()
+    await expect(hint).toBeVisible()
+    const error = (await wrong.boundingBox())!
+    expect((await hint.boundingBox())!.y).toBeGreaterThanOrEqual(error.y + error.height)
+  })
+
+  test('a new password prompt hides the hint', async ({ page }) => {
+    await press(page, true)
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+    await expect(screen(page, 'unlock')).toBeVisible()
+    await expect(page.locator('#caps-lock')).toBeHidden()
+  })
+})
+
 test('the promise: uses only the password you type, and its date forms', async ({ page }) => {
   const promise = 'Uses only the password you type. If it’s a date, it also tries other ways of writing it.'
   await expect(page.locator('#pick .note')).toHaveText(promise)

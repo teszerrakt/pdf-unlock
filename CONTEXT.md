@@ -44,6 +44,10 @@ _Avoid_: Invalid password, failed attempt
 One way of writing a typed date as digits (day-month-year, year-month-day, month-day-year, each with a long or short year), tried after the exact text. The app names the form that worked.
 _Avoid_: Variant, permutation, guess
 
+**Trimmed text**:
+The typed password without the whitespace at its start and end, tried right after the exact text when there was some. Date forms are built from it. It counts toward the 20 tries, not toward the date forms tried. The app says when it worked.
+_Avoid_: Cleaned, sanitized password
+
 **Batch**:
 Two or more attempts queued from one pick, drop or paste, run one at a time. It ends with a summary, never a single outcome.
 _Avoid_: Queue, multi-file, bulk

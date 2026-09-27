@@ -3,7 +3,7 @@
 // abandoned attempt's worker says late. Knows nothing about the page or workers: `main.ts` feeds in
 // worker answers and user actions, and renders what this calls on `Ui`.
 import { next, settled, start, type Action, type Batch, type Event as BatchEvent, type RowState, type Summary } from './batch'
-import { dateForms } from './dates'
+import { dateForms, datesTried } from './dates'
 import { createPacer, realClock, type Clock } from './pace'
 import type { WorkerRequest, WorkerResponse } from './unlock.worker'
 
@@ -237,7 +237,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
         display(() => go('batch'))
         return openFile(current.files[action.index])
       case 'unlock':
-        tried = action.candidates.length - 1
+        tried = datesTried(action.candidates)
         return work.send({ type: 'unlock', candidates: action.candidates })
       case 'ask': {
         // A Skip while this waits its turn moves the batch on; the prompt must not open for the next file.
@@ -327,7 +327,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
       }
       step = 2
       const candidates = dateForms(password, today())
-      tried = candidates.length - 1
+      tried = datesTried(candidates)
       tries = lane(TRY_FLOOR, TRY_CAP)
       patience()
       work.send({ type: 'unlock', candidates })
