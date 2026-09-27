@@ -1,7 +1,7 @@
 // Page 1 of the unlocked copy, drawn for the Done card's file icon. Takes pdf.js as an argument:
 // `main.ts` loads it only once Done shows, and the unit tests pass Node's build of it. `wasmUrl` is the
 // folder pdf.js reads its image decoders from.
-import type { getDocument } from 'pdfjs-dist'
+import type { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 
 // Where the page's pdf.js fetches its image decoders from: vite.config.ts ships them there.
 export const PDFJS_WASM = '/pdfjs/'

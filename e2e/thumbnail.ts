@@ -4,6 +4,7 @@ import { ink } from '../test/ink.ts'
 // pdf.js's two scripts in the build: the chunk the Done screen imports, and its worker.
 export const pdfjsScript = /\/assets\/pdf(js|\.worker)[^/]*\.js$/
 export const pdfjsChunk = /\/assets\/pdfjs-[^/]*\.js$/
+export const pdfjsWorker = /\/assets\/pdf\.worker[^/]*\.js$/
 
 export const doneIcon = (page: Page) => page.locator('#done-icon')
 

@@ -6,8 +6,7 @@ import { unlock } from './unlock'
 import { createQpdf } from '../test/qpdf'
 import { box, drawPage, fit, place } from './thumbnail'
 
-// The browser build needs APIs Node 22 lacks; the legacy build is the same renderer. In Node, pdf.js
-// reads its image decoders from the file system.
+// The build the page loads. In Node, pdf.js reads its image decoders from the file system.
 const pdfjs = async () => ({ ...(await import('pdfjs-dist/legacy/build/pdf.mjs')), wasmUrl: 'node_modules/pdfjs-dist/wasm/' })
 
 const asHtml = (canvas: Canvas) => canvas as unknown as HTMLCanvasElement

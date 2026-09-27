@@ -3,7 +3,7 @@ import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf, scan
 import { isLocked, qpdf } from '../test/qpdf.ts'
 import { readZip } from '../test/unzip.ts'
 import { downloadCopy, downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test, waitForServiceWorker } from './test.ts'
-import { doneIcon, pdfjsChunk, pdfjsScript, thumbnailInk } from './thumbnail.ts'
+import { doneIcon, pdfjsChunk, pdfjsScript, pdfjsWorker, thumbnailInk } from './thumbnail.ts'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -728,6 +728,19 @@ test.describe('page 1 on the Done card', () => {
     await unlockStatement(page, 'scan.pdf', scannedPdf({ openPassword: 'secret' }))
     await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
     expect(await thumbnailInk(page), 'the scan drew nothing').toBeGreaterThan(1000)
+  })
+
+  test('a browser without Promise.try (Safari 17.4 to 18.1) still shows page 1', async ({ page }) => {
+    const withoutPromiseTry = 'delete Promise.try;\n'
+    await page.addInitScript(withoutPromiseTry)
+    await page.route(pdfjsWorker, async (route) => {
+      const response = await route.fetch()
+      await route.fulfill({ response, body: withoutPromiseTry + (await response.text()) })
+    })
+    await page.reload()
+    await unlockStatement(page)
+    await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
+    expect(await thumbnailInk(page), 'page 1 drew nothing').toBeGreaterThan(0)
   })
 
   test('no pdf.js script is requested before Done shows', async ({ page }) => {
