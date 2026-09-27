@@ -29,8 +29,7 @@ export function saveAllChoice(count: number, canShare: boolean, ios: boolean) {
 
 export type DoneOptions = { of?: number; password?: string | null; form?: Form | null; removed?: Restriction[] }
 
-// "print", "print and copy", "print, copy and edit".
-const list = (words: string[]) => words.slice(0, -1).join(', ') + (words.length > 1 ? ' and ' : '') + words.at(-1)
+const list = (words: string[]) => new Intl.ListFormat('en-GB').format(words)
 
 const doing: Record<Restriction, string> = { print: 'printing', copy: 'copying', edit: 'editing' }
 
@@ -40,7 +39,6 @@ const doneLedes = {
 }
 
 // `saved`: bytes the repack took off an input `of` bytes long. It is named at 5% of `of`.
-// `removed`: the restrictions the locked PDF had, in the order Sphynx names them.
 export function doneText(copy: keyof typeof doneLedes): string
 export function doneText(fileName: string, hadPassword: boolean, saved?: number, options?: DoneOptions): string
 export function doneText(fileName: string, hadPassword?: boolean, saved = 0, { of = 0, password, form, removed = [] }: DoneOptions = {}) {

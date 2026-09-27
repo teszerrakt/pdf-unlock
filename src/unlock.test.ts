@@ -227,7 +227,10 @@ describe('what the unlocked copy shows on Done', () => {
     expect(await tryPassword(pdf, 'boss')).toMatchObject({ removed: ['copy', 'edit'] })
   })
 
-  it.each(['--show-npages', '--show-encryption'])('still unlocks when the %s run fails, leaving out what it would have read', async (flag) => {
+  it.each([
+    ['--show-npages', { pages: null, removed: ['print'] }],
+    ['--show-encryption', { pages: 1, removed: [] }],
+  ])('still unlocks when the %s run fails, leaving out what it would have read', async (flag, read) => {
     const failing: CreateQpdf = async () => {
       const q = await createQpdf()
       const callMain = q.callMain.bind(q)
@@ -236,7 +239,7 @@ describe('what the unlocked copy shows on Done', () => {
     }
     const result = await unlock(failing, await lockedPdf({ openPassword: 'secret', restrictions: ['print'] }), typed('secret'))
     await expectUnlockedCopy(result, true)
-    expect(result).toMatchObject(flag === '--show-npages' ? { pages: null, removed: ['print'] } : { pages: 1, removed: [] })
+    expect(result).toMatchObject(read)
   })
 })
 

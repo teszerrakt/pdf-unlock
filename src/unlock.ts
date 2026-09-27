@@ -14,8 +14,7 @@ export type CreateQpdf = () => Promise<Qpdf>
 // The restrictions Sphynx names, in the order it names them.
 export type Restriction = 'print' | 'copy' | 'edit'
 
-// How an attempt ends (see CONTEXT.md). `pages`: the unlocked copy's page count, null when qpdf could
-// not count them. `removed`: the restrictions the locked PDF had.
+// How an attempt ends (see CONTEXT.md).
 export type Outcome =
   | {
       type: 'unlocked'
