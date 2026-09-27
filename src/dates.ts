@@ -68,7 +68,7 @@ export function dateForms(typed: string, today: Date): Candidate[] {
   const digits = text.replace(/[ ./-]/g, '')
   if (!/^\d{6}(\d{2})?$/.test(digits)) return candidates
   const days = (['DMY', 'YMD', 'MDY'] as const).map((order) => read(digits, order, today)).filter((day) => day !== null)
-  const seen = new Set([typed, text])
+  const seen = new Set([text])
   for (const form of forms) {
     for (const day of days) {
       const password = spell(day, form)
@@ -80,5 +80,4 @@ export function dateForms(typed: string, today: Date): Candidate[] {
   return candidates
 }
 
-// The date forms among `candidates`, for the wrong-password line.
 export const datesTried = (candidates: Candidate[]) => candidates.filter(({ form }) => form !== null).length

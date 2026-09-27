@@ -22,7 +22,6 @@ export type Outcome =
       hadPassword: boolean
       password: string | null
       form: Form | null
-      // The password worked only without the whitespace typed around it.
       trimmed: boolean
       pages: number | null
       removed: Restriction[]
