@@ -10,11 +10,13 @@ export type WorkerRequest =
 
 // `restricted`: the file opens without a password; its restrictions are being removed.
 // `trying`: candidate `n` of `of` is being tried, after the ones before it missed.
+// `progress`: the copy is `percent` written. Sent while qpdf runs, and it reaches the page right away.
 export type WorkerResponse =
   | Outcome
   | Prompt
   | { type: 'restricted' }
   | { type: 'trying'; n: number; of: number }
+  | { type: 'progress'; percent: number }
   | { type: 'locked'; pdf: Uint8Array }
 
 const create: CreateQpdf = async () => (await createModule({ locateFile: () => wasmUrl })) as unknown as Qpdf
@@ -22,15 +24,18 @@ const create: CreateQpdf = async () => (await createModule({ locateFile: () => w
 // Kept between the open and each password try; dropped once unlocked.
 let input: Uint8Array | null = null
 
+const progress = (percent: number) => self.postMessage({ type: 'progress', percent } satisfies WorkerResponse)
+
 async function respond(request: WorkerRequest): Promise<WorkerResponse> {
   if (request.type === 'open') {
     input = new Uint8Array(await request.file.arrayBuffer())
-    return open(create, input, () => self.postMessage({ type: 'restricted' } satisfies WorkerResponse))
+    return open(create, input, () => self.postMessage({ type: 'restricted' } satisfies WorkerResponse), progress)
   }
   if (request.type === 'lock') {
-    return { type: 'locked', pdf: await lock(create, new Uint8Array(await request.file.arrayBuffer()), request.password) }
+    return { type: 'locked', pdf: await lock(create, new Uint8Array(await request.file.arrayBuffer()), request.password, progress) }
   }
-  return unlock(create, input!, request.candidates, (n, of) => self.postMessage({ type: 'trying', n, of } satisfies WorkerResponse))
+  const onTry = (n: number, of: number) => self.postMessage({ type: 'trying', n, of } satisfies WorkerResponse)
+  return unlock(create, input!, request.candidates, onTry, progress)
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
