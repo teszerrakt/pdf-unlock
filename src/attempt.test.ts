@@ -45,7 +45,7 @@ function setup() {
 }
 
 const pdf = (name = 'statement.pdf') => new File([new Uint8Array(1000)], name, { type: 'application/pdf' })
-const unlocked: WorkerResponse = { type: 'unlocked', pdf: new Uint8Array(900), hadPassword: true, password: 'secret', form: null }
+const unlocked: WorkerResponse = { type: 'unlocked', pdf: new Uint8Array(900), hadPassword: true, password: 'secret', form: null, pages: 1, removed: [] }
 const doneAt = (shown: readonly (readonly [View, number])[]) => shown.find(([view]) => view === 'done')?.[1]
 const gaps = (ticks: readonly (readonly [number, number])[]) => ticks.slice(1).map(([, at], i) => at - ticks[i][1])
 
@@ -297,4 +297,18 @@ test.each(lockFailureCases)('a lock that fails with $how $when slides back to Do
   expect(called('lockFailed')).toHaveLength(1)
   expect(called('show').filter(({ at }) => at >= start).map(({ args }) => args)).toEqual(moves)
   expect(attempt.locking).toBe(false)
+})
+
+test('a locked copy is shown with the page count of the unlocked copy it was made from', () => {
+  const { attempt, answer, called } = setup()
+  attempt.open([pdf('statement.pdf')])
+  answer({ ...unlocked, pages: 12 })
+  vi.runAllTimers()
+  attempt.addPassword()
+  attempt.lock(pdf('statement-unlocked.pdf'), 'hunter2')
+  const locked = new Uint8Array(950)
+  answer({ type: 'locked', pdf: locked })
+  vi.runAllTimers()
+
+  expect(called('locked').at(-1)!.args).toEqual([locked, 12])
 })

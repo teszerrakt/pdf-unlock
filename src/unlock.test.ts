@@ -117,7 +117,8 @@ describe('repacking the unlocked copy', () => {
       return createQpdf()
     }
     await expectUnlockedCopy(await unlock(outOfMemoryAfterOne, await pngImagePdf({ openPassword: 'secret' }), typed('secret')), true)
-    expect(runs).toBe(2)
+    // The repack, the plain decrypt, then the page count and the restrictions, which fail too.
+    expect(runs).toBe(4)
   })
 
   it('still unlocks, with a plain decrypt, when the repack run aborts out of memory', async () => {
@@ -139,7 +140,7 @@ describe('repacking the unlocked copy', () => {
       const q = await createQpdf()
       const callMain = q.callMain.bind(q)
       q.callMain = (args) => {
-        calls.push(args)
+        if (args.includes('--decrypt')) calls.push(args)
         return args.includes('--object-streams=generate') ? 2 : callMain(args)
       }
       return q
@@ -154,7 +155,7 @@ describe('repacking the unlocked copy', () => {
 describe('trying the date forms of a typed password', () => {
   const today = new Date(2026, 8, 26)
 
-  // Records the password of every qpdf run. A successful unlock runs qpdf twice with the password
+  // Records the password of every decrypt run. A successful unlock decrypts twice with the password
   // that worked: the repack run, then the plain decrypt it is compared with.
   function recordingPasswords() {
     const ran: string[] = []
@@ -162,7 +163,7 @@ describe('trying the date forms of a typed password', () => {
       const q = await createQpdf()
       const callMain = q.callMain.bind(q)
       q.callMain = (args) => {
-        ran.push(args.find((arg) => arg.startsWith('--password='))!.slice('--password='.length))
+        if (args.includes('--decrypt')) ran.push(args.find((arg) => arg.startsWith('--password='))!.slice('--password='.length))
         return callMain(args)
       }
       return q
@@ -195,10 +196,63 @@ describe('trying the date forms of a typed password', () => {
   })
 })
 
-it('leaves console.error as it found it', async () => {
-  const before = console.error
+describe('what the unlocked copy shows on Done', () => {
+  it('counts the pages of a 12-page locked PDF', async () => {
+    const pdf = await lockedPdf({ openPassword: 'secret' }, plainPdf({ pages: 12 }))
+    const result = await tryPassword(pdf, 'secret')
+    await expectUnlockedCopy(result, true)
+    expect(result).toMatchObject({ pages: 12 })
+  })
+
+  it('counts one page in the one-page locked PDF and restricted PDF', async () => {
+    expect(await tryPassword(await lockedPdf({ openPassword: 'secret' }), 'secret')).toMatchObject({ pages: 1 })
+    expect(await openFile(await restrictedPdf())).toMatchObject({ pages: 1 })
+  })
+
+  it('names the print, copy and edit restrictions removed from a restricted PDF, in that order', async () => {
+    expect(await openFile(await restrictedPdf())).toMatchObject({ removed: ['print', 'copy', 'edit'] })
+  })
+
+  it('names no restriction for a locked PDF with only an open password', async () => {
+    expect(await tryPassword(await lockedPdf({ openPassword: 'secret' }), 'secret')).toMatchObject({ removed: [] })
+  })
+
+  it('names only the print restriction for an open password with printing refused', async () => {
+    const pdf = await lockedPdf({ openPassword: 'secret', restrictions: ['print'] })
+    expect(await tryPassword(pdf, 'secret')).toMatchObject({ removed: ['print'] })
+  })
+
+  it('names the print restriction when only high-resolution printing is refused', async () => {
+    const pdf = await lockedPdf({ openPassword: 'secret', restrictions: ['high-res print'] })
+    expect(await tryPassword(pdf, 'secret')).toMatchObject({ removed: ['print'] })
+  })
+
+  it('reads the restrictions with the owner password too', async () => {
+    const pdf = await lockedPdf({ openPassword: 'secret', ownerPassword: 'boss', restrictions: ['copy', 'edit'] })
+    expect(await tryPassword(pdf, 'boss')).toMatchObject({ removed: ['copy', 'edit'] })
+  })
+
+  it.each([
+    ['--show-npages', { pages: null, removed: ['print'] }],
+    ['--show-encryption', { pages: 1, removed: [] }],
+  ])('still unlocks when the %s run fails, leaving out what it would have read', async (flag, read) => {
+    const failing: CreateQpdf = async () => {
+      const q = await createQpdf()
+      const callMain = q.callMain.bind(q)
+      q.callMain = (args) => (args.includes(flag) ? 2 : callMain(args))
+      return q
+    }
+    const result = await unlock(failing, await lockedPdf({ openPassword: 'secret', restrictions: ['print'] }), typed('secret'))
+    await expectUnlockedCopy(result, true)
+    expect(result).toMatchObject(read)
+  })
+})
+
+it('leaves console.error and console.log as it found them', async () => {
+  const before = { error: console.error, log: console.log }
   await openFile(notPdf())
-  expect(console.error).toBe(before)
+  await tryPassword(await lockedPdf({ openPassword: 'secret' }), 'secret')
+  expect({ error: console.error, log: console.log }).toEqual(before)
 })
 
 describe('locking the unlocked copy with an own password', () => {

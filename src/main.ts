@@ -5,7 +5,7 @@ import './style.css'
 import { isOwnPasswordTooLong } from './unlock'
 import type { WorkerResponse } from './unlock.worker'
 import { SHARE_ACTION, SHARE_CACHE, SHARED_AT_HEADER, SHARED_FILE, SHARED_NAME_HEADER, isLeftover } from './share-target'
-import { formatSize, isPdf, lockedName, uniqueNames, unlockedName } from './file'
+import { cardLine, formatSize, isPdf, lockedName, uniqueNames, unlockedName } from './file'
 import { browserName, isIos as detectIos, modifierKey, type Brand } from './platform'
 import { tryingText, wrongText } from './dates'
 import { doneText, saveAllChoice, saveChoice, zipFailed } from './save'
@@ -185,15 +185,15 @@ function markWrong() {
   replay(byId('unlock-cat-wrap'), 'swap')
 }
 
-function showUnlocked({ pdf, hadPassword, password: worked, form }: Unlocked, file: { name: string; size: number }) {
+function showUnlocked({ pdf, hadPassword, password: worked, form, pages, removed }: Unlocked, file: { name: string; size: number }) {
   password.value = ''
   const name = unlockedName(file.name)
   unlocked = new File([pdf as BlobPart], name, { type: 'application/pdf' })
   offer(unlocked)
   setDoneLocked(false)
   byId('done-name').textContent = name
-  byId('done-info').textContent = `${formatSize(unlocked.size)} · No password`
-  byId('done-text').textContent = doneText(file.name, hadPassword, file.size - unlocked.size, { of: file.size, password: worked, form })
+  byId('done-info').textContent = cardLine(unlocked.size, pages)
+  byId('done-text').textContent = doneText(file.name, hadPassword, file.size - unlocked.size, { of: file.size, password: worked, form, removed })
 }
 
 function offer(file: File) {
@@ -234,13 +234,13 @@ function checkOwnPassword() {
   lockSubmit.disabled = attempt.locking || !ownPassword.value || tooLong
 }
 
-function showLocked(pdf: Uint8Array) {
+function showLocked(pdf: Uint8Array, pages: number | null) {
   const name = lockedName(unlocked!.name)
   offer(new File([pdf as BlobPart], name, { type: 'application/pdf' }))
   setDoneLocked(true)
   byId('done-text').textContent = doneText('locked')
   byId('done-name').textContent = name
-  byId('done-info').textContent = `${formatSize(pdf.length)} · Your password`
+  byId('done-info').textContent = cardLine(pdf.length, pages, true)
 }
 
 function setReveal(on: boolean, input = password, button = reveal) {

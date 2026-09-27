@@ -20,3 +20,9 @@ export function uniqueNames(names: string[]) {
 
 export const formatSize = (bytes: number) =>
   bytes < 1e6 ? `${Math.max(1, Math.round(bytes / 1e3))} KB` : `${(bytes / 1e6).toFixed(1)} MB`
+
+// The line under a copy's name on Done.
+export const cardLine = (size: number, pages: number | null, locked = false) =>
+  [formatSize(size), pages === null ? '' : `${pages} ${pages === 1 ? 'page' : 'pages'}`, locked ? 'Your password' : '']
+    .filter(Boolean)
+    .join(' · ')

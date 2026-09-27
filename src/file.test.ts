@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatSize, isPdf, lockedName, uniqueNames, unlockedName } from './file'
+import { cardLine, formatSize, isPdf, lockedName, uniqueNames, unlockedName } from './file'
 
 describe('isPdf', () => {
   it.each([
@@ -51,6 +51,18 @@ describe('formatSize', () => {
     [12_345_678, '12.3 MB'],
   ])('shows %i bytes as %j', (bytes, expected) => {
     expect(formatSize(bytes)).toBe(expected)
+  })
+})
+
+describe('cardLine', () => {
+  it.each([
+    [2_400_000, 12, false, '2.4 MB · 12 pages'],
+    [96_000, 1, false, '96 KB · 1 page'],
+    [2_400_000, 12, true, '2.4 MB · 12 pages · Your password'],
+    [96_000, null, false, '96 KB'],
+    [96_000, null, true, '96 KB · Your password'],
+  ])('shows %i bytes and %j pages (locked copy: %j) as %j', (size, pages, locked, expected) => {
+    expect(cardLine(size, pages, locked)).toBe(expected)
   })
 })
 
