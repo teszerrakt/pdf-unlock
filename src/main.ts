@@ -182,6 +182,9 @@ function setWrong(on: boolean) {
   wrong.hidden = !on
   field.classList.toggle('wrong', on)
   password.setAttribute('aria-invalid', String(on))
+  // A hidden element named by aria-describedby is still read out, so the field names its error only while it shows.
+  if (on) password.setAttribute('aria-describedby', 'wrong')
+  else password.removeAttribute('aria-describedby')
   unlockCat.classList.toggle('cat-1', !on)
   unlockCat.classList.toggle('cat-4', on)
   byId('unlock-title').textContent = on ? 'Not quite.' : 'What’s the password?'
@@ -259,6 +262,7 @@ function checkOwnPassword() {
   byId('too-long').hidden = !tooLong
   byId('new-field').classList.toggle('wrong', tooLong)
   ownPassword.setAttribute('aria-invalid', String(tooLong))
+  ownPassword.setAttribute('aria-describedby', tooLong ? 'too-long new-password-hint' : 'new-password-hint')
   lockSubmit.disabled = attempt.locking || !ownPassword.value || tooLong
 }
 

@@ -99,6 +99,17 @@ test.describe('date forms', () => {
   })
 })
 
+// A hidden element named by aria-describedby is still read out, so each field names its error only while it shows.
+test('the open password field is described by the wrong-password line only while it shows', async ({ page }) => {
+  const field = page.locator('#password')
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+  await expect(field).toHaveAccessibleDescription('')
+  await enterPassword(page, 'nope')
+  await expect(field).toHaveAccessibleDescription('Wrong password. Try again.')
+  await pickFile(page, 'other.pdf', await lockedPdf({ openPassword: 'secret' }))
+  await expect(field).toHaveAccessibleDescription('')
+})
+
 test.describe('a password pasted with spaces around it', () => {
   test('" sphynx ": the Done text ends saying the password worked without the spaces around it', async ({ page }) => {
     await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'sphynx' }))
@@ -671,6 +682,15 @@ test.describe('own password', () => {
     await ownPassword(page).fill('x'.repeat(127))
     await expect(tooLong).toBeHidden()
     await expect(lockIt).toBeEnabled()
+  })
+
+  test('the own password field is described by Too long only while it shows', async ({ page }) => {
+    const hint = 'Sphynx can’t recover it. Keep it somewhere safe.'
+    await expect(ownPassword(page)).toHaveAccessibleDescription(hint)
+    await ownPassword(page).fill('é'.repeat(64))
+    await expect(ownPassword(page)).toHaveAccessibleDescription(`Too long. Use a shorter password. ${hint}`)
+    await ownPassword(page).fill('hunter2')
+    await expect(ownPassword(page)).toHaveAccessibleDescription(hint)
   })
 
   test('the eye toggle hides the own password', async ({ page }) => {
