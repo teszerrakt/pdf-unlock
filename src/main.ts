@@ -395,9 +395,10 @@ password.addEventListener('input', () => {
   replay(byId('unlock-cat-wrap'), 'swap')
 })
 
-// Caps Lock can only be read from a key event, so the hint waits for the first keystroke.
+// Caps Lock can only be read from a key event, so the hint waits for the first keystroke. Any key on
+// the page counts: Caps Lock turned off while Unlocking hides the field still reaches a wrong-password prompt.
 for (const type of ['keydown', 'keyup'] as const) {
-  password.addEventListener(type, (event) => {
+  document.addEventListener(type, (event) => {
     // Chrome's autofill fires a plain Event named keydown, with no modifier state.
     if (event instanceof KeyboardEvent) capsLock.hidden = !event.getModifierState('CapsLock')
   })

@@ -144,6 +144,14 @@ test.describe('Caps Lock hint', () => {
     expect((await hint.boundingBox())!.y).toBeGreaterThanOrEqual(error.y + error.height)
   })
 
+  test('Caps Lock turned off while the field is away: the wrong-password prompt comes back with no hint', async ({ page }) => {
+    await press(page, true)
+    await enterPassword(page, 'nope')
+    await page.locator('body').dispatchEvent('keyup', { key: 'CapsLock', modifierCapsLock: false })
+    await expect(page.locator('#wrong')).toBeVisible()
+    await expect(page.locator('#caps-lock')).toBeHidden()
+  })
+
   test('a new password prompt hides the hint', async ({ page }) => {
     await press(page, true)
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
