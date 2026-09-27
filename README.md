@@ -77,4 +77,4 @@ Keep the originals out of `public/`: everything there is shipped and precached.
 
 ## License
 
-The code is MIT (see `LICENSE`). The cat drawings and app icons are not: all rights reserved.
+The code is MIT (see `LICENSE`). The cat drawings and app icons (`public/art/`, `public/*.png`, `public/favicon.ico`) are not: all rights reserved.
