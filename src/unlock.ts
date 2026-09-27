@@ -50,9 +50,9 @@ async function run(create: CreateQpdf, input: Uint8Array, args: string[], onProg
   const original = { log: console.log, error: console.error }
   console.log = (...parts: unknown[]) => {
     const line = parts.join(' ')
+    stdout.push(line)
     const progress = progressLine.exec(line)
     if (progress) onProgress?.(Number(progress[1]))
-    else stdout.push(line)
   }
   console.error = (...parts: unknown[]) => void stderr.push(parts.join(' '))
   let q: Qpdf

@@ -824,8 +824,6 @@ kbd {
 .step-note {
   display: block;
   font-weight: 400;
-  /* A percentage that changes every frame keeps its digits still. */
-  font-variant-numeric: tabular-nums;
 }
 
 .dot {
