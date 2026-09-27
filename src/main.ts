@@ -12,6 +12,7 @@ import { doneText, saveAllChoice, saveChoice, zipFailed } from './save'
 import { rowText, type RowState, type Summary } from './batch'
 import { createAttempt, views, type Prompt, type Stop, type Unlocked, type View } from './attempt'
 import { storeZip } from './zip'
+import { drawPage, place } from './thumbnail'
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 
@@ -25,6 +26,8 @@ const wrong = byId('wrong')
 const capsLock = byId('caps-lock')
 const submit = byId<HTMLButtonElement>('submit')
 const unlockCat = byId('unlock-cat')
+const doneIcon = byId('done-icon')
+const doneThumb = byId<HTMLCanvasElement>('done-thumb')
 const download = byId<HTMLAnchorElement>('download')
 const share = byId<HTMLButtonElement>('share')
 const addPassword = byId<HTMLButtonElement>('add-password')
@@ -48,6 +51,8 @@ let worker: Worker | null = null
 let unlocked: File | null = null
 let offered: File | null = null
 let downloadUrl: string | null = null
+// The unlocked copy whose page 1 the Done card shows, or is drawing.
+let thumbFor: File | null = null
 let prompt: Prompt | null = null
 let isWrong = false
 let toastTimer = 0
@@ -74,6 +79,7 @@ function show(view: View, direction: 'fwd' | 'back' | null) {
 }
 
 function entered(view: View) {
+  if (view === 'done') return showThumbnail()
   if (view === 'relock') return ownPassword.focus()
   if (view !== 'unlock') return
   password.focus()
@@ -144,6 +150,8 @@ function clear() {
   downloadUrl = null
   unlocked = null
   offered = null
+  thumbFor = null
+  doneIcon.classList.remove('has-thumb')
   for (const url of batch?.urls ?? []) URL.revokeObjectURL(url)
   batch = null
   password.value = ''
@@ -196,6 +204,24 @@ function showUnlocked({ pdf, hadPassword, password: worked, form, trimmed, pages
   byId('done-name').textContent = name
   byId('done-info').textContent = cardLine(unlocked.size, pages)
   byId('done-text').textContent = doneText(file.name, hadPassword, file.size - unlocked.size, { of: file.size, password: worked, form, trimmed, removed })
+}
+
+// pdf.js loads here, the first time Done shows. Until page 1 is drawn, and if pdf.js fails to load
+// or draw it, the card keeps its "PDF" label. Locked Done keeps the unlocked copy's page.
+async function showThumbnail() {
+  const copy = unlocked
+  if (!copy || copy === thumbFor) return
+  thumbFor = copy
+  const page = document.createElement('canvas')
+  try {
+    await drawPage(copy, page, await import('./pdfjs'))
+  } catch {
+    return
+  }
+  // Another file was picked while this one drew.
+  if (thumbFor !== copy) return
+  place(page, doneThumb)
+  doneIcon.classList.add('has-thumb')
 }
 
 function offer(file: File) {

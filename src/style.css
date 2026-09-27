@@ -563,7 +563,28 @@ kbd {
   color: var(--accent);
 }
 
+/* Page 1 of the unlocked copy, drawn once Done shows. It fades in over the "PDF" label; nothing moves. */
+.file-icon .thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.file-icon.has-thumb {
+  color: transparent;
+  transition: color 0.25s ease;
+}
+
+.file-icon.has-thumb .thumb {
+  opacity: 1;
+}
+
 .file-badge {
+  z-index: 1;
   position: absolute;
   right: -7px;
   top: -7px;

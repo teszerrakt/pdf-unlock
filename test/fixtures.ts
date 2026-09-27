@@ -120,6 +120,19 @@ export const pngImagePdf = (lock: Pick<Lock, 'openPassword'> = {}) => lockedPdf(
 export const bloatedPngPdf = (lock: Pick<Lock, 'openPassword'> = {}) =>
   lockedPdf(lock, source(`${drawImage}\n${bloatedText()}`, pngImage()), uncompressed)
 
+// A black-and-white scan: one image, CCITT fax encoded (Modified Huffman) as scanners write it. Each
+// of its 16 rows is a white run of 0 then a black run of 16, so the whole image is black.
+function faxImage() {
+  const row = '00110101' + '0000010111'
+  const bits = row.repeat(16).padEnd(Math.ceil((row.length * 16) / 8) * 8, '0')
+  const data = String.fromCharCode(...bits.match(/.{8}/g)!.map((byte) => parseInt(byte, 2)))
+  const params = '/DecodeParms << /K 0 /Columns 16 /Rows 16 /EndOfBlock false >>'
+  return `<< /Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray /BitsPerComponent 1 /Filter /CCITTFaxDecode ${params} /Length ${data.length} >>\nstream\n${data}\nendstream`
+}
+
+// A locked PDF whose page is a scan, and nothing else.
+export const scannedPdf = (lock: Pick<Lock, 'openPassword'> = {}) => lockedPdf(lock, source(drawImage, faxImage()))
+
 // Bytes that are not a PDF at all, and a PDF cut off halfway.
 export const notPdf = () => new TextEncoder().encode('This is a plain text file, not a PDF.\n')
 export const brokenPdf = async () => (await lockedPdf({ openPassword: 'secret' })).slice(0, 200)

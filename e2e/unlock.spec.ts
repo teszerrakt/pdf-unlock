@@ -1,8 +1,9 @@
 import type { Page } from '@playwright/test'
-import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf } from '../test/fixtures.ts'
+import { bloatedPdf, brokenPdf, lockedPdf, notPdf, plainPdf, restrictedPdf, scannedPdf } from '../test/fixtures.ts'
 import { isLocked, qpdf } from '../test/qpdf.ts'
 import { readZip } from '../test/unzip.ts'
 import { downloadCopy, downloadUnlockedCopy, enterPassword, expect, pickFile, screen, test, waitForServiceWorker } from './test.ts'
+import { doneIcon, pdfjsChunk, pdfjsScript, thumbnailInk } from './thumbnail.ts'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -705,4 +706,84 @@ test('a lock that fails keeps the unlocked copy: Done slides back, says so, and 
   // The retry starts like every other visit to the set screen: the own password shows.
   await page.getByRole('button', { name: 'Add password', exact: true }).click()
   await expect(page.getByLabel('New password', { exact: true })).toHaveAttribute('type', 'text')
+})
+
+test.describe('page 1 on the Done card', () => {
+  // So page.route sees pdf.js's requests: the service worker would answer them from its cache.
+  test.use({ serviceWorkers: 'block' })
+
+  async function unlockStatement(page: Page) {
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+    await enterPassword(page, 'secret')
+    await expect(screen(page, 'done')).toBeVisible()
+  }
+
+  test('a locked PDF unlocked: the file icon shows page 1 of the unlocked copy', async ({ page }) => {
+    await unlockStatement(page)
+    await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
+    expect(await thumbnailInk(page), 'page 1 drew nothing').toBeGreaterThan(0)
+  })
+
+  test('a scanned PDF unlocked: the file icon shows the scan on page 1', async ({ page }) => {
+    await pickFile(page, 'scan.pdf', await scannedPdf({ openPassword: 'secret' }))
+    await enterPassword(page, 'secret')
+    await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
+    expect(await thumbnailInk(page), 'the scan drew nothing').toBeGreaterThan(1000)
+  })
+
+  test('no pdf.js script is requested before Done shows', async ({ page }) => {
+    const requested: { url: string; done: boolean }[] = []
+    await page.route(pdfjsScript, async (route) => {
+      requested.push({ url: route.request().url(), done: await screen(page, 'done').isVisible() })
+      await route.continue()
+    })
+    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+    await expect(screen(page, 'unlock')).toBeVisible()
+    expect(requested, 'pdf.js requested on the pick or unlock screen').toEqual([])
+
+    await enterPassword(page, 'secret')
+    await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
+    expect(requested.map(({ done }) => done)).toEqual([true, true])
+  })
+
+  test('the pdf.js chunk fails to load: Done still works and the card keeps its PDF label', async ({ page }) => {
+    await page.route(pdfjsChunk, (route) => route.abort())
+    const failed = page.waitForEvent('requestfailed', (request) => pdfjsChunk.test(request.url()))
+    await unlockStatement(page)
+    await failed
+    await expect(page.locator('#done-text')).toHaveText('This copy opens anywhere, no password needed.')
+    await expect(doneIcon(page)).not.toHaveClass(/\bhas-thumb\b/)
+    await expect(doneIcon(page)).toContainText('PDF')
+    await downloadUnlockedCopy(page)
+  })
+
+  test('page 1 drawn: the unlocked copy downloads byte-identical to before it was drawn', async ({ page }) => {
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    await page.route(pdfjsChunk, async (route) => {
+      await held
+      await route.continue()
+    })
+    await unlockStatement(page)
+    const before = await downloadUnlockedCopy(page)
+    await expect(doneIcon(page)).not.toHaveClass(/\bhas-thumb\b/)
+
+    release()
+    await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
+    const after = await downloadUnlockedCopy(page)
+    expect(after.pdf).toEqual(before.pdf)
+  })
+
+  test('Add password succeeds: Locked Done still shows page 1 of the unlocked copy', async ({ page }) => {
+    await unlockStatement(page)
+    await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
+    await page.getByRole('button', { name: 'Add password', exact: true }).click()
+    await page.getByLabel('New password', { exact: true }).fill('hunter2')
+    await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+
+    await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
+    await expect(page.locator('#done-badge-locked')).toBeVisible()
+    await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
+    expect(await thumbnailInk(page), 'page 1 drew nothing').toBeGreaterThan(0)
+  })
 })
