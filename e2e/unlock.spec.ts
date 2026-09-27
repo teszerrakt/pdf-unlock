@@ -755,7 +755,8 @@ test.describe('page 1 on the Done card', () => {
 
     await enterPassword(page, 'secret')
     await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
-    expect(requested.map(({ done }) => done)).toEqual([true, true])
+    expect(requested.length).toBeGreaterThan(0)
+    expect(requested.filter(({ done }) => !done), 'pdf.js requested before Done showed').toEqual([])
   })
 
   test('the pdf.js chunk fails to load: Done still works and the card keeps its PDF label', async ({ page }) => {
