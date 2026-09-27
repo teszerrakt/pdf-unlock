@@ -5,7 +5,7 @@ import { dateForms } from './dates'
 import { lock, open, unlock, type CreateQpdf, type Outcome, type Prompt } from './unlock'
 
 const openFile = (pdf: Uint8Array, onRestricted?: () => void) => open(createQpdf, pdf, onRestricted)
-const typed = (password: string) => [{ password, form: null }]
+const typed = (password: string) => [{ password, form: null, trimmed: false }]
 const tryPassword = (pdf: Uint8Array, password: string) => unlock(createQpdf, pdf, typed(password))
 
 // An unlocked copy must open with no password and pass qpdf's structural check.
@@ -193,6 +193,28 @@ describe('trying the date forms of a typed password', () => {
     expect(result).toEqual({ type: 'wrong-password' })
     expect(ran).toEqual(candidates.map(({ password }) => password))
     expect(onTry.mock.calls).toEqual(candidates.slice(1).map((_, i) => [i + 2, candidates.length]))
+  })
+})
+
+describe('trying a pasted password without the spaces around it', () => {
+  const today = new Date(2026, 8, 26)
+
+  it('unlocks the locked PDF with open password sphynx typed as " sphynx ", marked trimmed', async () => {
+    const result = await unlock(createQpdf, await lockedPdf({ openPassword: 'sphynx' }), dateForms(' sphynx ', today))
+    await expectUnlockedCopy(result, true)
+    expect(result).toMatchObject({ password: 'sphynx', form: null, trimmed: true })
+  })
+
+  it('marks no unlock trimmed when the exact text worked', async () => {
+    const result = await unlock(createQpdf, await lockedPdf({ openPassword: 'sphynx' }), dateForms('sphynx', today))
+    expect(result).toMatchObject({ type: 'unlocked', trimmed: false })
+  })
+
+  it('shows no date-try counter for the trimmed text', async () => {
+    const onTry = vi.fn()
+    const result = await unlock(createQpdf, await lockedPdf({ openPassword: 'sphynx' }), dateForms(' SPHYNX ', today), onTry)
+    expect(result).toEqual({ type: 'wrong-password' })
+    expect(onTry).not.toHaveBeenCalled()
   })
 })
 

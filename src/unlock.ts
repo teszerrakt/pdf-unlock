@@ -22,6 +22,7 @@ export type Outcome =
       hadPassword: boolean
       password: string | null
       form: Form | null
+      trimmed: boolean
       pages: number | null
       removed: Restriction[]
     }
@@ -74,17 +75,17 @@ export async function open(create: CreateQpdf, input: Uint8Array, onRestricted?:
 const repack = ['--object-streams=generate', '--recompress-flate', '--compression-level=9']
 
 // Removes the lock with the first candidate that opens the PDF, trying them in order.
-// `onTry(n, of)` fires before each candidate after the first.
+// `onTry(n, of)` fires before each date form.
 export async function unlock(
   create: CreateQpdf,
   input: Uint8Array,
   candidates: Candidate[],
   onTry?: (n: number, of: number) => void,
 ): Promise<Outcome | Prompt> {
-  for (const [i, { password, form }] of candidates.entries()) {
-    if (i > 0) onTry?.(i + 1, candidates.length)
+  for (const [i, { password, form, trimmed }] of candidates.entries()) {
+    if (form) onTry?.(i + 1, candidates.length)
     const result = await decryptWith(create, input, password)
-    if (result.type === 'unlocked') return { ...result, form }
+    if (result.type === 'unlocked') return { ...result, form, trimmed }
     if (result.type !== 'wrong-password') return result
   }
   return { type: 'wrong-password' }
@@ -107,7 +108,7 @@ async function decryptWith(create: CreateQpdf, input: Uint8Array, password: stri
   else if (!isPasswordError(errors)) ({ errors, output } = await decrypt())
   if (output) {
     const read = await inspect(create, input, output, args)
-    return { type: 'unlocked', pdf: output, hadPassword: password !== null, password, form: null, ...read }
+    return { type: 'unlocked', pdf: output, hadPassword: password !== null, password, form: null, trimmed: false, ...read }
   }
   if (isPasswordError(errors)) return { type: password === null ? 'needs-password' : 'wrong-password' }
   return unreadable(errors)

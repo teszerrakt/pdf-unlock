@@ -3,8 +3,9 @@
 
 export type Form = 'DDMMYYYY' | 'DDMMYY' | 'YYYYMMDD' | 'YYMMDD' | 'MMDDYYYY' | 'MMDDYY'
 
-// One password to try: the exact text typed (`form: null`) or one of its date forms.
-export type Candidate = { password: string; form: Form | null }
+// One password to try: the exact text typed, that text without the whitespace around it (`trimmed`),
+// or one of its date forms.
+export type Candidate = { password: string; form: Form | null; trimmed: boolean }
 
 // Month-first last.
 const forms: Form[] = ['DDMMYYYY', 'DDMMYY', 'YYYYMMDD', 'YYMMDD', 'MMDDYYYY', 'MMDDYY']
@@ -60,18 +61,23 @@ function read(digits: string, order: 'DMY' | 'YMD' | 'MDY', today: Date): Day | 
 }
 
 export function dateForms(typed: string, today: Date): Candidate[] {
-  const candidates: Candidate[] = [{ password: typed, form: null }]
-  const digits = typed.replace(/[ ./-]/g, '')
+  const candidates: Candidate[] = [{ password: typed, form: null, trimmed: false }]
+  // Pasted text often brings a space or line break with it.
+  const text = typed.trim()
+  if (text && text !== typed) candidates.push({ password: text, form: null, trimmed: true })
+  const digits = text.replace(/[ ./-]/g, '')
   if (!/^\d{6}(\d{2})?$/.test(digits)) return candidates
   const days = (['DMY', 'YMD', 'MDY'] as const).map((order) => read(digits, order, today)).filter((day) => day !== null)
-  const seen = new Set([typed])
+  const seen = new Set([text])
   for (const form of forms) {
     for (const day of days) {
       const password = spell(day, form)
       if (seen.has(password)) continue
       seen.add(password)
-      candidates.push({ password, form })
+      candidates.push({ password, form, trimmed: false })
     }
   }
   return candidates
 }
+
+export const datesTried = (candidates: Candidate[]) => candidates.filter(({ form }) => form !== null).length

@@ -45,7 +45,7 @@ function setup() {
 }
 
 const pdf = (name = 'statement.pdf') => new File([new Uint8Array(1000)], name, { type: 'application/pdf' })
-const unlocked: WorkerResponse = { type: 'unlocked', pdf: new Uint8Array(900), hadPassword: true, password: 'secret', form: null, pages: 1, removed: [] }
+const unlocked: WorkerResponse = { type: 'unlocked', pdf: new Uint8Array(900), hadPassword: true, password: 'secret', form: null, trimmed: false, pages: 1, removed: [] }
 const doneAt = (shown: readonly (readonly [View, number])[]) => shown.find(([view]) => view === 'done')?.[1]
 const gaps = (ticks: readonly (readonly [number, number])[]) => ticks.slice(1).map(([, at], i) => at - ticks[i][1])
 
@@ -236,6 +236,33 @@ test('a batch whose password prompt is queued behind a row update: Skip this fil
   ])
   expect(called('rows').at(-1)!.args[0]).toEqual(['skipped', 'needs-password'])
   expect(sent).toEqual(['open', 'unlock', 'open'])
+})
+
+test.each([
+  ['a date', ' 05081990 ', 7],
+  ['no date', ' sphynx ', 0],
+])('a wrong password with spaces around it and %s: the wrong-password line counts only the date forms, not the trimmed text', (_, typed, tried) => {
+  const { attempt, answer, called } = setup()
+  attempt.open([pdf()])
+  answer({ type: 'needs-password' })
+  vi.runAllTimers()
+  attempt.submit(typed, false)
+  answer({ type: 'wrong-password' }, 10)
+  vi.runAllTimers()
+
+  expect(called('ask').at(-1)!.args[0]).toMatchObject({ wrong: true, tried })
+})
+
+test('in a batch, a wrong password with spaces around it: the wrong-password line counts only the date forms', () => {
+  const { attempt, answer, called } = setup()
+  attempt.open([pdf('march.pdf'), pdf('april.pdf')])
+  answer({ type: 'needs-password' })
+  vi.runAllTimers()
+  attempt.submit(' 05081990 ', false)
+  answer({ type: 'wrong-password' }, 10)
+  vi.runAllTimers()
+
+  expect(called('ask').at(-1)!.args[0]).toMatchObject({ wrong: true, tried: 7 })
 })
 
 test('in a batch, a wrong password’s answer makes the password prompt ready again at once, before its prompt’s turn', () => {
