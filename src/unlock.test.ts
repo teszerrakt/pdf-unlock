@@ -222,6 +222,11 @@ describe('what the unlocked copy shows on Done', () => {
     expect(await tryPassword(pdf, 'secret')).toMatchObject({ removed: ['print'] })
   })
 
+  it('names the print restriction when only high-resolution printing is refused', async () => {
+    const pdf = await lockedPdf({ openPassword: 'secret', restrictions: ['high-res print'] })
+    expect(await tryPassword(pdf, 'secret')).toMatchObject({ removed: ['print'] })
+  })
+
   it('reads the restrictions with the owner password too', async () => {
     const pdf = await lockedPdf({ openPassword: 'secret', ownerPassword: 'boss', restrictions: ['copy', 'edit'] })
     expect(await tryPassword(pdf, 'boss')).toMatchObject({ removed: ['copy', 'edit'] })

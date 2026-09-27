@@ -45,10 +45,16 @@ type Lock = {
   // 40 is RC4 and needs qpdf's weak-crypto flag; 128 is AES-128; 256 is AES-256.
   bits?: 40 | 128 | 256
   // What the owner password refuses. Omit for all three on a restricted PDF, none with an open password.
-  restrictions?: Restriction[]
+  // 'high-res print' refuses only high-resolution printing.
+  restrictions?: (Restriction | 'high-res print')[]
 }
 
-const refuse: Record<Restriction, string> = { print: '--print=none', copy: '--extract=n', edit: '--modify=none' }
+const refuse: Record<Restriction | 'high-res print', string> = {
+  print: '--print=none',
+  'high-res print': '--print=low',
+  copy: '--extract=n',
+  edit: '--modify=none',
+}
 
 // A locked PDF: an open password, restrictions, or both.
 export async function lockedPdf(
