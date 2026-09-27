@@ -350,10 +350,7 @@ const attempt = createAttempt(
     stop,
     clear,
     leftRelock: clearOwnPassword,
-    lockFailed() {
-      clearOwnPassword()
-      byId('done-text').textContent = doneText('lock-failed')
-    },
+    lockFailed: () => (byId('done-text').textContent = doneText('lock-failed')),
     batch: startBatch,
     rows: paint,
     copy(index, { pdf }) {
