@@ -212,6 +212,56 @@ test.describe('batch', () => {
     expect(download.suggestedFilename()).toBe('form-unlocked.pdf')
   })
 
+  // Call `watchToast` before its action.
+  async function watchToast(page: Page) {
+    await page.evaluate(() => {
+      const times: number[] = ((window as unknown as { toastTimes: number[] }).toastTimes = [])
+      new MutationObserver((records) => records.forEach(() => times.push(performance.now()))).observe(document.getElementById('toast')!, {
+        attributeFilter: ['hidden'],
+      })
+    })
+  }
+
+  async function toastTime(page: Page) {
+    await expect(page.locator('#toast')).toBeHidden({ timeout: 6000 })
+    const [shown, hidden] = await page.evaluate(() => (window as unknown as { toastTimes: number[] }).toastTimes)
+    return hidden - shown
+  }
+
+  test('Save all that succeeds shows Download started for 1.8 s', async ({ page }) => {
+    await threeKinds(page)
+    await watchToast(page)
+    await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Save all' }).click()])
+    await expect(page.locator('#toast-text')).toHaveText('Download started')
+    const shown = await toastTime(page)
+    expect(shown).toBeGreaterThanOrEqual(1750)
+    expect(shown).toBeLessThan(2500)
+  })
+
+  test('Save all whose zip step throws its RangeError says it is too big for one zip for 4 s, and each row’s Save still downloads', async ({ page }) => {
+    await threeKinds(page)
+    // A name that encodes to 4 GB trips storeZip's own size check.
+    await page.evaluate(() => (TextEncoder.prototype.encode = () => ({ length: 2 ** 32 }) as never))
+    await watchToast(page)
+    await page.getByRole('button', { name: 'Save all' }).click()
+    await expect(page.locator('#toast-text')).toHaveText('Too big for one zip. Save them one by one.')
+    const shown = await toastTime(page)
+    expect(shown).toBeGreaterThanOrEqual(3950)
+    expect(shown).toBeLessThan(4700)
+
+    const saves = page.locator('#batch-done li').getByRole('link', { name: 'Save' })
+    for (const [i, name] of ['march-unlocked.pdf', 'form-unlocked.pdf'].entries()) {
+      const [download] = await Promise.all([page.waitForEvent('download'), saves.nth(i).click()])
+      expect(download.suggestedFilename()).toBe(name)
+    }
+  })
+
+  test('a batch that unlocked at least one file shows the heap of open padlocks', async ({ page }) => {
+    await threeKinds(page)
+    await expect(page.locator('#batch-done-art')).toHaveClass(/\bcat-7\b/)
+    await expect(page.locator('#batch-done-art')).not.toHaveClass(/\bcat-3\b/)
+  })
+
   test('two locked PDFs with the same open password: typed once with the checkbox on, no second prompt', async ({ page }) => {
     const pdf = await lockedPdf({ openPassword: 'secret' })
     await pickFiles(page, [
@@ -424,6 +474,26 @@ test.describe('own password', () => {
 
   const ownPassword = (page: import('@playwright/test').Page) => page.getByLabel('New password', { exact: true })
 
+  test('a lock that succeeds shows the cat with its padlock shut', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
+    await expect(page.locator('#done-art')).toHaveClass(/\bcat-6\b/)
+    await expect(page.locator('#done-art')).not.toHaveClass(/\bcat-3\b/)
+  })
+
+  test('one file unlocked after a locked copy: Done shows the cat with the open padlock again', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+    await expect(page.locator('#done-art')).toHaveClass(/\bcat-6\b/)
+    await page.getByRole('button', { name: 'Unlock another' }).click()
+    await pickFile(page, 'march.pdf', await lockedPdf({ openPassword: 'secret' }))
+    await enterPassword(page, 'secret')
+    await expect(page.getByRole('heading', { name: 'Unlocked.' })).toBeVisible()
+    await expect(page.locator('#done-art')).toHaveClass(/\bcat-3\b/)
+    await expect(page.locator('#done-art')).not.toHaveClass(/\bcat-6\b/)
+  })
+
   test('Add password on the unlocked copy opens the set screen, Lock it waits for a password', async ({ page }) => {
     await expect(screen(page, 'relock')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Set a new password.' })).toBeVisible()
@@ -517,4 +587,32 @@ test.describe('own password', () => {
     await expect(ownPassword(page)).toHaveAttribute('type', 'password')
     await expect(page.locator('#new-reveal')).toHaveAttribute('aria-label', 'Show password')
   })
+})
+
+test('a lock that fails keeps the unlocked copy: Done slides back, says so, and still offers Add password', async ({ page }) => {
+  // As when the device runs out of memory.
+  await page.addInitScript(() => {
+    const post = Worker.prototype.postMessage
+    Worker.prototype.postMessage = function (this: Worker, message: { type: string }, options?: StructuredSerializeOptions) {
+      if (message.type === 'lock') setTimeout(() => this.dispatchEvent(new ErrorEvent('error')))
+      else post.call(this, message, options)
+    } as Worker['postMessage']
+  })
+  await revisit(page)
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+  await enterPassword(page, 'secret')
+  await page.getByRole('button', { name: 'Add password', exact: true }).click()
+  await page.getByLabel('New password', { exact: true }).fill('hunter2')
+  await page.getByRole('button', { name: 'Hide password', exact: true }).click()
+  await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+
+  await expect(page.getByRole('heading', { name: 'Unlocked.' })).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('data-dir', 'back')
+  await expect(page.locator('#done-text')).toHaveText('The password couldn’t be added on this device. Your unlocked copy is still here.')
+  await expect(page.getByRole('button', { name: 'Add password', exact: true })).toBeVisible()
+  await expect(screen(page, 'stop')).toBeHidden()
+  expect((await downloadUnlockedCopy(page)).name).toBe('statement-unlocked.pdf')
+  // The retry starts like every other visit to the set screen: the own password shows.
+  await page.getByRole('button', { name: 'Add password', exact: true }).click()
+  await expect(page.getByLabel('New password', { exact: true })).toHaveAttribute('type', 'text')
 })
