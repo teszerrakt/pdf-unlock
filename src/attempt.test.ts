@@ -298,3 +298,17 @@ test.each(lockFailureCases)('a lock that fails with $how $when slides back to Do
   expect(called('show').filter(({ at }) => at >= start).map(({ args }) => args)).toEqual(moves)
   expect(attempt.locking).toBe(false)
 })
+
+test('a locked copy is shown with the page count of the unlocked copy it was made from', () => {
+  const { attempt, answer, called } = setup()
+  attempt.open([pdf('statement.pdf')])
+  answer({ ...unlocked, pages: 12 })
+  vi.runAllTimers()
+  attempt.addPassword()
+  attempt.lock(pdf('statement-unlocked.pdf'), 'hunter2')
+  const locked = new Uint8Array(950)
+  answer({ type: 'locked', pdf: locked })
+  vi.runAllTimers()
+
+  expect(called('locked').at(-1)!.args).toEqual([locked, 12])
+})

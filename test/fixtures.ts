@@ -8,7 +8,7 @@ import { qpdf } from './qpdf'
 
 // Pages that say "Sphynx fixture". The wasm build of qpdf cannot repair a bad xref, so it is computed.
 // `image` is a stream object drawn as /Im1, its data one byte per character. Every page draws the same
-// content.
+// content; the pages after the first are appended, so a one-page source keeps its bytes.
 function source(content = 'BT /F1 24 Tf 20 60 Td (Sphynx fixture) Tj ET', image?: string, pages = 1) {
   const page = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >>${image ? ' /XObject << /Im1 6 0 R >>' : ''} >> >>`
   const first = image ? 7 : 6

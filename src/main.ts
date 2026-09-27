@@ -45,8 +45,6 @@ const isIos = detectIos(platform, navigator.maxTouchPoints)
 
 let worker: Worker | null = null
 let unlocked: File | null = null
-// The unlocked copy's page count, which a locked copy of it shares.
-let pages: number | null = null
 let offered: File | null = null
 let downloadUrl: string | null = null
 let prompt: Prompt | null = null
@@ -144,7 +142,6 @@ function clear() {
   if (downloadUrl) URL.revokeObjectURL(downloadUrl)
   downloadUrl = null
   unlocked = null
-  pages = null
   offered = null
   for (const url of batch?.urls ?? []) URL.revokeObjectURL(url)
   batch = null
@@ -188,11 +185,10 @@ function markWrong() {
   replay(byId('unlock-cat-wrap'), 'swap')
 }
 
-function showUnlocked({ pdf, hadPassword, password: worked, form, pages: count, removed }: Unlocked, file: { name: string; size: number }) {
+function showUnlocked({ pdf, hadPassword, password: worked, form, pages, removed }: Unlocked, file: { name: string; size: number }) {
   password.value = ''
   const name = unlockedName(file.name)
   unlocked = new File([pdf as BlobPart], name, { type: 'application/pdf' })
-  pages = count
   offer(unlocked)
   setDoneLocked(false)
   byId('done-name').textContent = name
@@ -238,7 +234,7 @@ function checkOwnPassword() {
   lockSubmit.disabled = attempt.locking || !ownPassword.value || tooLong
 }
 
-function showLocked(pdf: Uint8Array) {
+function showLocked(pdf: Uint8Array, pages: number | null) {
   const name = lockedName(unlocked!.name)
   offer(new File([pdf as BlobPart], name, { type: 'application/pdf' }))
   setDoneLocked(true)

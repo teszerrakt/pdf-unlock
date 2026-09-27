@@ -11,7 +11,7 @@ import type { Candidate, Form } from './dates'
 // Loads a fresh qpdf instance. The browser passes the wasm URL, Node passes the wasm bytes.
 export type CreateQpdf = () => Promise<Qpdf>
 
-// The restrictions Sphynx names, in the order it names them.
+// The restrictions Sphynx names.
 export type Restriction = 'print' | 'copy' | 'edit'
 
 // How an attempt ends (see CONTEXT.md).
@@ -113,7 +113,7 @@ async function decryptWith(create: CreateQpdf, input: Uint8Array, password: stri
   return unreadable(errors)
 }
 
-// How qpdf --show-encryption says each restriction is set.
+// How qpdf --show-encryption says each restriction is set, in the order Sphynx names them.
 const refused: [Restriction, RegExp][] = [
   ['print', /^print (low|high) resolution: not allowed$/m],
   ['copy', /^extract for any purpose: not allowed$/m],

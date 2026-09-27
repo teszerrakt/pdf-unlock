@@ -47,7 +47,8 @@ export type Ui = {
   // The worker answered, or the file was skipped: Unlock works again.
   ready(): void
   unlocked(outcome: Unlocked, file: { name: string; size: number }): void
-  locked(pdf: Uint8Array): void
+  // `pages`: the unlocked copy's, which its locked copy shares.
+  locked(pdf: Uint8Array, pages: number | null): void
   stop(reason: Stop): void
   // Drop everything tied to the last file: typed passwords, unlocked copies.
   clear(): void
@@ -71,6 +72,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
   // The running worker. An answer from any other is from an abandoned attempt, and is dropped.
   let worker = 0
   let file = { name: '', size: 0 }
+  let pages: number | null = null
   let step = 1
   let tried = 0
   // Locking runs after Done, so its busy and Locked screens slide in forward.
@@ -161,10 +163,11 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
       case 'not-locked':
         return stop({ type: 'not-locked', name: file.name })
       case 'unlocked':
+        pages = response.pages
         ui.unlocked(response, file)
         return finish()
       case 'locked':
-        ui.locked(response.pdf)
+        ui.locked(response.pdf, pages)
         return finish()
       case 'unreadable':
         return locking ? lockFailed() : stop({ type: 'failed', text: response.message })
