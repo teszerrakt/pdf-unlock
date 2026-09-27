@@ -16,6 +16,7 @@ declare global {
     stepLog: Tick[]
     busyShown: boolean
     tryLog: { text: string; at: number }[]
+    noteLog: string[]
   }
 }
 
@@ -47,7 +48,8 @@ async function slowWorker(page: Page, gap: number) {
       }
       set onmessage(handler) {
         super.onmessage = (event) => {
-          window.workerAnswers++
+          // Progress is not an answer: it only says how far the one on its way has got.
+          if (event.data?.type !== 'progress') window.workerAnswers++
           // One chain for every answer: one arriving after the release still waits its turn.
           const held = shown
           delivered = delivered
@@ -80,6 +82,22 @@ async function recordSteps(page: Page) {
     return { log, first }
   }
 }
+
+// Every text step 2's note shows while the Unlocking or Locking screen is up.
+async function recordNote(page: Page) {
+  await page.evaluate(() => {
+    const log: string[] = (window.noteLog = [])
+    const note = document.getElementById('trying')!
+    const busy = document.getElementById('busy')!
+    new MutationObserver(() => {
+      if (!note.hidden && !busy.hidden && note.textContent !== log.at(-1)) log.push(note.textContent!)
+    }).observe(note, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] })
+  })
+  return () => page.evaluate(() => window.noteLog)
+}
+
+const percentage = /^(\d+)%$/
+const percentages = (log: string[]) => log.filter((text) => percentage.test(text)).map((text) => Number(percentage.exec(text)![1]))
 
 async function watchBusy(page: Page) {
   await page.evaluate(() => {
@@ -124,7 +142,7 @@ test('restricted and unlocked arriving 5 ms apart show step 2 as active before s
   expect(log[done3].at - log[active2].at, 'ms step 2 stayed active').toBeGreaterThanOrEqual(300)
 })
 
-test('a tiny locked PDF reaches Done without ever showing the Unlocking screen', async ({ page }) => {
+test('a tiny locked PDF reaches Done without ever showing the Unlocking screen or a percentage', async ({ page }) => {
   // A slow runner takes longer than the patience even on this file. With the page's clock stopped the
   // patience never runs out, so this checks that every answer beating it shows at once.
   await page.clock.install()
@@ -133,9 +151,69 @@ test('a tiny locked PDF reaches Done without ever showing the Unlocking screen',
   await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
   await expect(screen(page, 'unlock')).toBeVisible()
   const busyShown = await watchBusy(page)
+  const note = await recordNote(page)
   await enterPassword(page, 'secret')
   await expect(screen(page, 'done')).toBeVisible()
   expect(await busyShown()).toBe(false)
+  expect(await note()).toEqual([])
+  await expect(page.locator('#trying')).not.toHaveText(percentage)
+})
+
+test('a bloated locked PDF on a slow device: step 2’s note counts up in percent, never down, and leaves for Done after 100%', async ({ page }) => {
+  await slowWorker(page, 20)
+  await page.goto('/')
+  await pickFile(page, 'scan.pdf', await bloatedPdf({ openPassword: 'secret' }))
+  await expect(screen(page, 'unlock')).toBeVisible()
+  const note = await recordNote(page)
+  await page.evaluate(() => window.holdWorker())
+  await enterPassword(page, 'secret')
+  await expect(screen(page, 'done')).toBeVisible()
+
+  const log = await note()
+  expect(log.every((text) => percentage.test(text)), `only percentages: ${log}`).toBe(true)
+  const values = percentages(log)
+  expect(values.length, 'percentages shown').toBeGreaterThan(1)
+  expect(values.slice(1).every((value, i) => value > values[i]), `never decreases: ${values}`).toBe(true)
+  expect(log.at(-1)).toBe('100%')
+})
+
+test('a date password that opens on its 3rd form: step 2’s note counts the date forms, then shows the percentage', async ({ page }) => {
+  await slowWorker(page, 0)
+  await page.clock.setFixedTime(new Date(2026, 8, 26, 12))
+  await page.goto('/')
+  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: '19900825' }))
+  await expect(screen(page, 'unlock')).toBeVisible()
+  const note = await recordNote(page)
+  await page.evaluate(() => window.holdWorker())
+  // Typed with dots, so the exact text is none of its 6 date forms: 7 tries in all.
+  await enterPassword(page, '25.08.1990')
+  await expect(screen(page, 'done')).toBeVisible()
+  await expect(page.locator('#done-text')).toContainText('Your password worked written as 19900825 (year-month-day).')
+
+  const log = await note()
+  expect(log[0]).toBe('Trying other ways of writing the date · 2 of 7')
+  const firstPercent = log.findIndex((text) => percentage.test(text))
+  expect(firstPercent, `a percentage after the counts: ${log}`).toBeGreaterThan(0)
+  expect(log.slice(firstPercent).every((text) => percentage.test(text)), `no count after the percentage: ${log}`).toBe(true)
+})
+
+test('adding a password on a slow device: the Locking screen’s step 2 note shows the percentage', async ({ page }) => {
+  await slowWorker(page, 0)
+  await page.goto('/')
+  await pickFile(page, 'scan.pdf', await bloatedPdf({ openPassword: 'secret' }))
+  await enterPassword(page, 'secret')
+  await expect(screen(page, 'done')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Add password', exact: true }).click()
+  await page.getByLabel('New password', { exact: true }).fill('hunter2')
+  const note = await recordNote(page)
+  await page.evaluate(() => window.holdWorker())
+  await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
+
+  const values = percentages(await note())
+  expect(values.length, 'percentages shown on the Locking screen').toBeGreaterThan(0)
+  expect(values.at(-1)).toBe(100)
 })
 
 test('a bloated locked PDF ticks steps 1, 2 and 3 in order, the second at least 300 ms after the first', async ({ page }) => {
@@ -202,16 +280,17 @@ test('date forms count up under step 2, at least 150 ms apart, before the wrong 
   expect(Math.min(...gaps), 'ms between two counts').toBeGreaterThanOrEqual(140)
 })
 
-test('after a date form worked, adding a password shows the Locking steps with no try count', async ({ page }) => {
+test('after a date form worked, adding a password shows the Locking steps with a percentage, not the try count', async ({ page }) => {
   await slowWorker(page, 0)
   await page.clock.setFixedTime(new Date(2026, 8, 26, 12))
   await page.goto('/')
   await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: '05081990' }))
   await expect(screen(page, 'unlock')).toBeVisible()
+  const note = await recordNote(page)
   await page.evaluate(() => window.holdWorker())
   await enterPassword(page, '900805')
-  await expect(page.locator('#trying')).toHaveText('Trying other ways of writing the date · 2 of 6')
   await expect(screen(page, 'done')).toBeVisible()
+  expect((await note())[0]).toBe('Trying other ways of writing the date · 2 of 6')
   await expect(page.locator('#done-text')).toContainText('Your password worked written as 05081990 (day-month-year).')
 
   await page.getByRole('button', { name: 'Add password', exact: true }).click()
@@ -219,8 +298,8 @@ test('after a date form worked, adding a password shows the Locking steps with n
   await page.evaluate(() => window.holdWorker())
   await page.getByRole('button', { name: 'Lock it', exact: true }).click()
   await expect(screen(page, 'busy')).toBeVisible()
-  await expect(page.locator('#steps li').nth(1)).toHaveText('Adding your password', { useInnerText: true })
-  await expect(page.locator('#trying')).toBeHidden()
+  await expect(page.locator('#steps li').nth(1).locator('.step-label')).toHaveText('Adding your password')
+  await expect(page.locator('#trying')).toHaveText(percentage)
   await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
 })
 

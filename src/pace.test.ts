@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import { createPacer } from './pace'
+import { createFrameLane, createPacer, type Frame } from './pace'
 
 beforeEach(() => void vi.useFakeTimers())
 afterEach(() => void vi.useRealTimers())
@@ -94,4 +94,34 @@ test('an update that throws does not stall the ones queued behind it', () => {
     ['a', 0],
     ['c', 700],
   ])
+})
+
+const frame: Frame = (fn) => {
+  const timer = setTimeout(fn, 16)
+  return () => clearTimeout(timer)
+}
+
+test('a frame lane runs only the latest of the updates pushed within one frame, on that frame', () => {
+  const lane = createFrameLane(frame)
+  const { ran, log } = recorder()
+  lane.push(log('a'))
+  lane.push(log('b'))
+  vi.advanceTimersByTime(10)
+  lane.push(log('c'))
+  vi.advanceTimersByTime(6)
+  lane.push(log('d'))
+  vi.runAllTimers()
+  expect(ran).toEqual([
+    ['c', 16],
+    ['d', 32],
+  ])
+})
+
+test('a cleared frame lane runs nothing it held', () => {
+  const lane = createFrameLane(frame)
+  const { ran, log } = recorder()
+  lane.push(log('a'))
+  lane.clear()
+  vi.runAllTimers()
+  expect(ran).toEqual([])
 })

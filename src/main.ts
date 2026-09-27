@@ -115,6 +115,11 @@ function setTrying(count: { n: number; of: number } | null) {
   if (count) byId('trying').textContent = tryingText(count.n, count.of)
 }
 
+function setProgress(percent: number) {
+  byId('trying').hidden = false
+  byId('trying').textContent = `${percent}%`
+}
+
 function stop(reason: Stop) {
   let title = 'That didn’t work.'
   let text: string
@@ -345,6 +350,7 @@ const attempt = createAttempt(
     busy: setBusy,
     steps: setSteps,
     trying: setTrying,
+    progress: setProgress,
     ask: askPassword,
     ready: () => (submit.disabled = false),
     unlocked: showUnlocked,

@@ -320,3 +320,28 @@ describe('locking the unlocked copy with an own password', () => {
     expect(create).not.toHaveBeenCalled()
   })
 })
+
+describe('reporting progress while writing the copy', () => {
+  // Rises only, starts at 0 or above, ends at exactly 100, and passes through a value between.
+  function expectProgress(reported: number[]) {
+    expect(reported.slice(1).every((value, i) => value >= reported[i]), `never decreases: ${reported}`).toBe(true)
+    expect(reported[0]).toBeGreaterThanOrEqual(0)
+    expect(reported.at(-1)).toBe(100)
+    expect(reported.some((value) => value > 0 && value < 100), `a value between 0 and 100: ${reported}`).toBe(true)
+  }
+
+  it('reports progress that never decreases and ends at 100 while unlocking a bloated PDF with its open password', async () => {
+    const reported: number[] = []
+    const pdf = await bloatedPdf({ openPassword: 'secret' })
+    await expectUnlockedCopy(await unlock(createQpdf, pdf, typed('secret'), undefined, (percent) => reported.push(percent)), true)
+    expectProgress(reported)
+  })
+
+  it('reports progress that never decreases and ends at 100 while locking an unlocked copy', async () => {
+    const copy = await tryPassword(await bloatedPdf({ openPassword: 'secret' }), 'secret')
+    const reported: number[] = []
+    const locked = await lock(createQpdf, (copy as Extract<Outcome, { type: 'unlocked' }>).pdf, 'hunter2', (percent) => reported.push(percent))
+    expect(await openFile(locked)).toEqual({ type: 'needs-password' })
+    expectProgress(reported)
+  })
+})

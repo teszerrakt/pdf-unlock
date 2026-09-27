@@ -35,14 +35,26 @@ export type Prompt = { type: 'needs-password' } | { type: 'wrong-password' }
 // This wasm build reports a missing or wrong password only through stderr (exit code 2 either way).
 const isPasswordError = (message: string) => /invalid password/i.test(message)
 
+// How far a write has got, in percent.
+export type OnProgress = (percent: number) => void
+
+// With --progress, qpdf prints "<program>: /out.pdf: write progress: N%" to stdout as it writes.
+const progressLine = /: write progress: (\d+)%$/
+
 // A fresh instance per run: qpdf cannot be re-entered after it throws, and no memory outlives the run.
-async function run(create: CreateQpdf, input: Uint8Array, args: string[]) {
+// `onProgress` gets each progress line while callMain runs, and the line is left out of `stdout`.
+async function run(create: CreateQpdf, input: Uint8Array, args: string[], onProgress?: OnProgress) {
   const stdout: string[] = []
   const stderr: string[] = []
   // qpdf binds console.log and console.error when instantiated, so swapping them in for that moment
   // routes its stdout and stderr here.
   const original = { log: console.log, error: console.error }
-  console.log = (...parts: unknown[]) => void stdout.push(parts.join(' '))
+  console.log = (...parts: unknown[]) => {
+    const line = parts.join(' ')
+    const progress = progressLine.exec(line)
+    if (progress) onProgress?.(Number(progress[1]))
+    else stdout.push(line)
+  }
   console.error = (...parts: unknown[]) => void stderr.push(parts.join(' '))
   let q: Qpdf
   try {
@@ -58,13 +70,37 @@ async function run(create: CreateQpdf, input: Uint8Array, args: string[]) {
   return { code, ok, errors, output, stdout: stdout.join('\n') }
 }
 
+// One percentage for work spread over several runs, in whole numbers that only ever rise.
+// `part(from, to)` maps one run's own 0–100% onto from–to of the whole.
+function progress(onProgress?: OnProgress) {
+  let last = -1
+  const report = (percent: number) => {
+    const whole = Math.floor(percent)
+    if (whole <= last) return
+    last = whole
+    onProgress?.(whole)
+  }
+  return {
+    part: (from: number, to: number) => (percent: number) => report(from + ((to - from) * percent) / 100),
+    // A run that fails after its copy is written, or never prints 100%, still ends the work at 100.
+    done: () => report(100),
+  }
+}
+
+type Progress = ReturnType<typeof progress>
+
 // Opens a file. A restricted PDF has no password prompt, so it is unlocked straight away;
 // `onRestricted` fires first so the page can show progress.
-export async function open(create: CreateQpdf, input: Uint8Array, onRestricted?: () => void): Promise<Outcome | Prompt> {
+export async function open(
+  create: CreateQpdf,
+  input: Uint8Array,
+  onRestricted?: () => void,
+  onProgress?: OnProgress,
+): Promise<Outcome | Prompt> {
   const { code, errors } = await run(create, input, ['--is-encrypted', '/in.pdf'])
   if (code === 0) {
     onRestricted?.()
-    return decryptWith(create, input, null)
+    return decryptWith(create, input, null, progress(onProgress))
   }
   if (isPasswordError(errors)) return { type: 'needs-password' }
   if (code === 2 && !errors) return { type: 'not-locked' }
@@ -73,18 +109,23 @@ export async function open(create: CreateQpdf, input: Uint8Array, onRestricted?:
 
 // Lossless flags only: see Repack in CONTEXT.md.
 const repack = ['--object-streams=generate', '--recompress-flate', '--compression-level=9']
+// Of an unlock's progress, the repacked run covers up to this percentage and the plain run the rest.
+const REPACKED = 70
 
 // Removes the lock with the first candidate that opens the PDF, trying them in order.
-// `onTry(n, of)` fires before each date form.
+// `onTry(n, of)` fires before each date form. A wrong candidate fails before qpdf writes anything,
+// so `onProgress` only hears from the one that opens the file.
 export async function unlock(
   create: CreateQpdf,
   input: Uint8Array,
   candidates: Candidate[],
   onTry?: (n: number, of: number) => void,
+  onProgress?: OnProgress,
 ): Promise<Outcome | Prompt> {
+  const report = progress(onProgress)
   for (const [i, { password, form, trimmed }] of candidates.entries()) {
     if (form) onTry?.(i + 1, candidates.length)
-    const result = await decryptWith(create, input, password)
+    const result = await decryptWith(create, input, password, report)
     if (result.type === 'unlocked') return { ...result, form, trimmed }
     if (result.type !== 'wrong-password') return result
   }
@@ -92,21 +133,24 @@ export async function unlock(
 }
 
 // Removes the lock with one open password, or with none for a restricted PDF.
-async function decryptWith(create: CreateQpdf, input: Uint8Array, password: string | null): Promise<Outcome | Prompt> {
+async function decryptWith(create: CreateQpdf, input: Uint8Array, password: string | null, report: Progress): Promise<Outcome | Prompt> {
   const args = password === null ? [] : [`--password=${password}`]
-  const decrypt = (extra: string[] = []) => run(create, input, [...args, '--decrypt', ...extra, '/in.pdf', '/out.pdf'])
+  const decrypt = (extra: string[], onProgress: OnProgress) =>
+    run(create, input, [...args, '--decrypt', '--progress', ...extra, '/in.pdf', '/out.pdf'], onProgress)
+  const plainRun = () => decrypt([], report.part(REPACKED, 100))
   // A repack run that throws (a wasm abort, such as running out of memory) counts as failed.
-  let { errors, output } = await decrypt(repack).catch(() => ({ errors: '', output: undefined }))
+  let { errors, output } = await decrypt(repack, report.part(0, REPACKED)).catch(() => ({ errors: '', output: undefined }))
   // --recompress-flate drops PNG predictors, which can grow an image several times over while the
   // rest of the file shrinks. So the plain decrypt always runs too, and the smaller copy wins. That
   // run failing, even running out of memory, still leaves the repacked copy.
   if (output) {
-    const plain = await decrypt().then(({ output }) => output, () => undefined)
+    const plain = await plainRun().then(({ output }) => output, () => undefined)
     if (plain && plain.length < output.length) output = plain
   }
   // A file the repack run fails on gets the plain decrypt; a wrong password would fail that too.
-  else if (!isPasswordError(errors)) ({ errors, output } = await decrypt())
+  else if (!isPasswordError(errors)) ({ errors, output } = await plainRun())
   if (output) {
+    report.done()
     const read = await inspect(create, input, output, args)
     return { type: 'unlocked', pdf: output, hadPassword: password !== null, password, form: null, trimmed: false, ...read }
   }
@@ -140,13 +184,16 @@ async function inspect(create: CreateQpdf, input: Uint8Array, output: Uint8Array
 export const isOwnPasswordTooLong = (password: string) => new TextEncoder().encode(password).length > 127
 
 // The named flags keep an own password that starts with "--" from reading as a flag.
-export async function lock(create: CreateQpdf, input: Uint8Array, password: string): Promise<Uint8Array> {
+export async function lock(create: CreateQpdf, input: Uint8Array, password: string, onProgress?: OnProgress): Promise<Uint8Array> {
   // An empty open password would give a copy that opens without one.
   if (!password) throw new Error('An own password cannot be empty')
   if (isOwnPasswordTooLong(password)) throw new Error('An own password cannot be over 127 UTF-8 bytes')
-  const args = ['--encrypt', `--user-password=${password}`, `--owner-password=${password}`, '--bits=256', '--']
-  const { errors, output } = await run(create, input, [...args, '/in.pdf', '/out.pdf'])
+  // --progress goes before --encrypt: qpdf reads everything up to "--" as an encryption option.
+  const args = ['--progress', '--encrypt', `--user-password=${password}`, `--owner-password=${password}`, '--bits=256', '--']
+  const report = progress(onProgress)
+  const { errors, output } = await run(create, input, [...args, '/in.pdf', '/out.pdf'], report.part(0, 100))
   if (!output) throw new Error(errors || 'qpdf could not lock the copy')
+  report.done()
   return output
 }
 

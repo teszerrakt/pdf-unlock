@@ -4,7 +4,7 @@
 // worker answers and user actions, and renders what this calls on `Ui`.
 import { next, settled, start, type Action, type Batch, type Event as BatchEvent, type RowState, type Summary } from './batch'
 import { dateForms, datesTried } from './dates'
-import { createPacer, realClock, type Clock } from './pace'
+import { createFrameLane, createPacer, realClock, realFrame, type Clock, type Frame } from './pace'
 import type { WorkerRequest, WorkerResponse } from './unlock.worker'
 
 export const views = ['pick', 'busy', 'unlock', 'done', 'stop', 'relock', 'batch', 'batch-done'] as const
@@ -18,7 +18,8 @@ const PATIENCE = 300
 // Once the Unlocking or Locking screen shows, its steps tick at least STEP_FLOOR apart, and the last
 // tick shows for HOLD before Done. Date tries count TRY_FLOOR apart, adding at most TRY_CAP of wait per
 // password tried. Batch rows change at least ROW_FLOOR apart, adding at most ROW_CAP per batch. Every
-// floor, and the hold, is 0 under reduced motion.
+// floor, and the hold, is 0 under reduced motion. The percentage has no floor: it changes at most once
+// a frame, so it keeps up with the work.
 const STEP_FLOOR = 350
 const HOLD = 500
 const TRY_FLOOR = 150
@@ -43,6 +44,8 @@ export type Ui = {
   steps(n: number): void
   // The date-try counter, or none.
   trying(count: { n: number; of: number } | null): void
+  // How far the copy is written, in the counter's place.
+  progress(percent: number): void
   ask(prompt: Prompt): void
   // The worker answered, or the file was skipped: Unlock works again.
   ready(): void
@@ -65,9 +68,13 @@ export type Ui = {
 // `start(id)` starts a worker whose answers come back through `answer(id, …)`.
 export type Work = { start(id: number): void; send(request: WorkerRequest): void; stop(): void }
 
-type Options = { clock?: Clock; reduced?: () => boolean; today?: () => Date }
+type Options = { clock?: Clock; frame?: Frame; reduced?: () => boolean; today?: () => Date }
 
-export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced = () => false, today = () => new Date() }: Options = {}) {
+export function createAttempt(
+  ui: Ui,
+  work: Work,
+  { clock = realClock, frame = realFrame, reduced = () => false, today = () => new Date() }: Options = {},
+) {
   let view: View = 'pick'
   // The running worker. An answer from any other is from an abandoned attempt, and is dropped.
   let worker = 0
@@ -85,6 +92,17 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
   let steps = lane(0)
   let tries = lane(0)
   let rows = lane(0)
+  const progress = createFrameLane(frame)
+  // The latest percentage the worker sent, and the one on screen.
+  let percent: number | null = null
+  let percentShown: number | null = null
+  // Answers on the Unlocking screen are numbered as they queue. The percentage waits for the ones queued
+  // before it, so it never shows under a step or a count still waiting its turn.
+  let queued = 0
+  let shown = 0
+  let needed = 0
+  // When the last date-try count showed: the percentage replacing it waits a try floor, like the next count.
+  let countedAt = -Infinity
 
   function go(to: View, back = false) {
     const direction = to === view ? null : back || (depth[to] < depth[view] && !locking) ? 'back' : 'fwd'
@@ -109,13 +127,27 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
 
   function showBusy() {
     setSteps(step)
+    if (percent !== null) ui.progress((percentShown = percent))
     go('busy')
     // Appearing is the screen's first tick, so the next update waits a step floor after it.
     steps.push(() => {})
   }
 
+  function showPercent() {
+    progress.push(() => {
+      if (view !== 'busy' || shown < needed || percent === null || percent === percentShown) return
+      const wait = (reduced() ? 0 : TRY_FLOOR) - (clock.now() - countedAt)
+      if (wait > 0) return void clock.later(showPercent, wait)
+      ui.progress((percentShown = percent))
+    })
+  }
+
   function patience(then = showBusy) {
     ui.trying(null)
+    progress.clear()
+    percent = percentShown = null
+    shown = needed = queued
+    countedAt = -Infinity
     wait(then, PATIENCE)
   }
 
@@ -147,14 +179,32 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     if (from !== worker) return
     if (run) return batchAnswer(response)
     if (view !== 'busy') return handle(response)
+    if (response.type === 'progress') {
+      percent = response.percent
+      needed = queued
+      return showPercent()
+    }
     const live = () => from === worker && view === 'busy'
-    if (response.type === 'trying') return tries.push(() => live() && handle(response))
-    tries.push(() => steps.push(() => live() && handle(response)))
+    const n = ++queued
+    const display = () => {
+      // An abandoned attempt's answer runs late, numbered below the next attempt's.
+      shown = Math.max(shown, n)
+      if (!live()) return
+      handle(response)
+      showPercent()
+    }
+    if (response.type === 'trying') return tries.push(display)
+    tries.push(() => steps.push(display))
   }
 
   function handle(response: WorkerResponse) {
+    // Before the Unlocking screen shows, it only keeps the latest, for the screen to show as it appears.
+    if (response.type === 'progress') return void (percent = response.percent)
     if (response.type === 'restricted') return setSteps(2)
-    if (response.type === 'trying') return ui.trying({ n: response.n, of: response.of })
+    if (response.type === 'trying') {
+      countedAt = clock.now()
+      return ui.trying({ n: response.n, of: response.of })
+    }
     cancelPending()
     ui.ready()
     if (response.type === 'needs-password' || response.type === 'wrong-password') return ask(response.type === 'wrong-password')
@@ -213,7 +263,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
   }
 
   function batchAnswer(response: WorkerResponse) {
-    if (response.type === 'restricted' || response.type === 'trying' || response.type === 'locked') return
+    if (response.type === 'restricted' || response.type === 'trying' || response.type === 'progress' || response.type === 'locked') return
     cancelPending()
     ui.ready()
     if (response.type === 'needs-password' || response.type === 'wrong-password') return batchStep({ type: response.type })
