@@ -563,7 +563,7 @@ kbd {
   color: var(--accent);
 }
 
-/* Page 1 of the unlocked copy, drawn once Done shows. It fades in over the "PDF" label; nothing moves. */
+/* Fades in over the "PDF" label; nothing moves. */
 .file-icon .thumb {
   position: absolute;
   inset: 0;

@@ -206,11 +206,10 @@ function showUnlocked({ pdf, hadPassword, password: worked, form, trimmed, pages
   byId('done-text').textContent = doneText(file.name, hadPassword, file.size - unlocked.size, { of: file.size, password: worked, form, trimmed, removed })
 }
 
-// pdf.js loads here, the first time Done shows. Until page 1 is drawn, and if pdf.js fails to load
-// or draw it, the card keeps its "PDF" label. Locked Done keeps the unlocked copy's page.
+// Imported here, so the pick and unlock screens never fetch pdf.js. Locked Done keeps the unlocked copy's page.
 async function showThumbnail() {
-  const copy = unlocked
-  if (!copy || copy === thumbFor) return
+  const copy = unlocked!
+  if (copy === thumbFor) return
   thumbFor = copy
   const page = document.createElement('canvas')
   try {

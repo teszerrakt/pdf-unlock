@@ -712,8 +712,8 @@ test.describe('page 1 on the Done card', () => {
   // So page.route sees pdf.js's requests: the service worker would answer them from its cache.
   test.use({ serviceWorkers: 'block' })
 
-  async function unlockStatement(page: Page) {
-    await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
+  async function unlockStatement(page: Page, name = 'statement.pdf', pdf = lockedPdf({ openPassword: 'secret' })) {
+    await pickFile(page, name, await pdf)
     await enterPassword(page, 'secret')
     await expect(screen(page, 'done')).toBeVisible()
   }
@@ -725,8 +725,7 @@ test.describe('page 1 on the Done card', () => {
   })
 
   test('a scanned PDF unlocked: the file icon shows the scan on page 1', async ({ page }) => {
-    await pickFile(page, 'scan.pdf', await scannedPdf({ openPassword: 'secret' }))
-    await enterPassword(page, 'secret')
+    await unlockStatement(page, 'scan.pdf', scannedPdf({ openPassword: 'secret' }))
     await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
     expect(await thumbnailInk(page), 'the scan drew nothing').toBeGreaterThan(1000)
   })

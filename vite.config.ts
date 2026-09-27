@@ -25,7 +25,6 @@ function productionHeaders(): Plugin {
 }
 
 // pdf.js fetches its image decoders by file name from one folder, so they ship unhashed under it.
-// jbig2.wasm decodes black-and-white scans (JBIG2 and CCITT fax), openjpeg.wasm JPEG 2000, qcms ICC colour.
 function pdfjsWasm(): Plugin {
   const files = ['jbig2.wasm', 'openjpeg.wasm', 'qcms_bg.wasm']
   const read = (file: string) => readFileSync(new URL(`node_modules/pdfjs-dist/wasm/${file}`, import.meta.url))
