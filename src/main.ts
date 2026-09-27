@@ -110,14 +110,10 @@ function setBusy(kind: keyof typeof busyText, name: string) {
   byId('busy-name').textContent = name
 }
 
-function setTrying(count: { n: number; of: number } | null) {
-  byId('trying').hidden = !count
-  if (count) byId('trying').textContent = tryingText(count.n, count.of)
-}
-
-function setProgress(percent: number) {
-  byId('trying').hidden = false
-  byId('trying').textContent = `${percent}%`
+// Step 2's note: the date-try counter or the percentage, or none.
+function setNote(text: string | null) {
+  byId('trying').hidden = text === null
+  if (text !== null) byId('trying').textContent = text
 }
 
 function stop(reason: Stop) {
@@ -349,8 +345,8 @@ const attempt = createAttempt(
     show,
     busy: setBusy,
     steps: setSteps,
-    trying: setTrying,
-    progress: setProgress,
+    trying: (count) => setNote(count && tryingText(count.n, count.of)),
+    progress: (percent) => setNote(`${percent}%`),
     ask: askPassword,
     ready: () => (submit.disabled = false),
     unlocked: showUnlocked,

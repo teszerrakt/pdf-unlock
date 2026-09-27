@@ -93,7 +93,6 @@ export function createAttempt(
   let tries = lane(0)
   let rows = lane(0)
   const progress = createFrameLane(frame)
-  // The latest percentage the worker sent, and the one on screen.
   let percent: number | null = null
   let percentShown: number | null = null
   // Answers on the Unlocking screen are numbered as they queue. The percentage waits for the ones queued
@@ -147,7 +146,6 @@ export function createAttempt(
     progress.clear()
     percent = percentShown = null
     shown = needed = queued
-    countedAt = -Infinity
     wait(then, PATIENCE)
   }
 
@@ -178,12 +176,13 @@ export function createAttempt(
   function answer(from: number, response: WorkerResponse) {
     if (from !== worker) return
     if (run) return batchAnswer(response)
-    if (view !== 'busy') return handle(response)
+    // Before the Unlocking screen shows, only the latest is kept, for the screen to show as it appears.
     if (response.type === 'progress') {
       percent = response.percent
       needed = queued
       return showPercent()
     }
+    if (view !== 'busy') return handle(response)
     const live = () => from === worker && view === 'busy'
     const n = ++queued
     const display = () => {
@@ -198,8 +197,6 @@ export function createAttempt(
   }
 
   function handle(response: WorkerResponse) {
-    // Before the Unlocking screen shows, it only keeps the latest, for the screen to show as it appears.
-    if (response.type === 'progress') return void (percent = response.percent)
     if (response.type === 'restricted') return setSteps(2)
     if (response.type === 'trying') {
       countedAt = clock.now()

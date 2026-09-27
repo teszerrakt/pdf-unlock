@@ -35,14 +35,13 @@ export type Prompt = { type: 'needs-password' } | { type: 'wrong-password' }
 // This wasm build reports a missing or wrong password only through stderr (exit code 2 either way).
 const isPasswordError = (message: string) => /invalid password/i.test(message)
 
-// How far a write has got, in percent.
 export type OnProgress = (percent: number) => void
 
 // With --progress, qpdf prints "<program>: /out.pdf: write progress: N%" to stdout as it writes.
 const progressLine = /: write progress: (\d+)%$/
 
 // A fresh instance per run: qpdf cannot be re-entered after it throws, and no memory outlives the run.
-// `onProgress` gets each progress line while callMain runs, and the line is left out of `stdout`.
+// `onProgress` gets each progress line while callMain runs.
 async function run(create: CreateQpdf, input: Uint8Array, args: string[], onProgress?: OnProgress) {
   const stdout: string[] = []
   const stderr: string[] = []
@@ -71,7 +70,6 @@ async function run(create: CreateQpdf, input: Uint8Array, args: string[], onProg
 }
 
 // One percentage for work spread over several runs, in whole numbers that only ever rise.
-// `part(from, to)` maps one run's own 0–100% onto from–to of the whole.
 function progress(onProgress?: OnProgress) {
   let last = -1
   const report = (percent: number) => {

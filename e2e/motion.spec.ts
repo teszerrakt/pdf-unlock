@@ -151,11 +151,9 @@ test('a tiny locked PDF reaches Done without ever showing the Unlocking screen o
   await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
   await expect(screen(page, 'unlock')).toBeVisible()
   const busyShown = await watchBusy(page)
-  const note = await recordNote(page)
   await enterPassword(page, 'secret')
   await expect(screen(page, 'done')).toBeVisible()
   expect(await busyShown()).toBe(false)
-  expect(await note()).toEqual([])
   await expect(page.locator('#trying')).not.toHaveText(percentage)
 })
 

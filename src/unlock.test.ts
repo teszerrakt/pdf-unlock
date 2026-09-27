@@ -322,7 +322,6 @@ describe('locking the unlocked copy with an own password', () => {
 })
 
 describe('reporting progress while writing the copy', () => {
-  // Rises only, starts at 0 or above, ends at exactly 100, and passes through a value between.
   function expectProgress(reported: number[]) {
     expect(reported.slice(1).every((value, i) => value >= reported[i]), `never decreases: ${reported}`).toBe(true)
     expect(reported[0]).toBeGreaterThanOrEqual(0)

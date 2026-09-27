@@ -15,12 +15,12 @@ export const realClock: Clock = {
 export type Frame = (fn: () => void) => () => void
 
 export const realFrame: Frame = (fn) => {
-  const id = requestAnimationFrame(() => fn())
+  const id = requestAnimationFrame(fn)
   return () => cancelAnimationFrame(id)
 }
 
 // For a value that changes faster than the screen repaints: only the latest update runs, once a frame.
-export function createFrameLane(frame: Frame = realFrame) {
+export function createFrameLane(frame: Frame) {
   let latest: (() => void) | null = null
   let cancel: (() => void) | null = null
   return {
