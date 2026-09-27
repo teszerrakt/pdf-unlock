@@ -13,6 +13,9 @@ const clock: Clock = {
   },
 }
 
+// One animation frame at 60 Hz, rounded down.
+const FRAME = 16
+
 type Call = { at: number; name: keyof Ui; args: unknown[] }
 
 // Records what the page is told to render and what the worker is sent, each with its time.
@@ -26,6 +29,7 @@ function setup() {
   let worker = 0
   const attempt = createAttempt(ui, { start: (id) => void (worker = id), send: (request) => void sent.push(request.type), stop() {} }, {
     clock,
+    frame: (fn) => clock.later(fn, FRAME),
     today: () => new Date(2026, 8, 26, 12),
   })
   // Answers as the worker running now, `after` ms from now: a late answer once its attempt is gone.
@@ -338,4 +342,128 @@ test('a locked copy is shown with the page count of the unlocked copy it was mad
   vi.runAllTimers()
 
   expect(called('locked').at(-1)!.args).toEqual([locked, 12])
+})
+
+const percents = (harness: ReturnType<typeof setup>) => harness.called('progress').map(({ at, args: [percent] }) => [percent as number, at] as const)
+
+test('progress arriving every 5 ms on the Unlocking screen: the percentage changes at most once a frame, and the steps keep their floors', () => {
+  const harness = setup()
+  const { attempt, answer, now, shown, steps } = harness
+  attempt.open([pdf()])
+  answer({ type: 'needs-password' })
+  vi.advanceTimersByTime(0)
+  attempt.submit('secret', false)
+  const submitted = now()
+  vi.advanceTimersByTime(300)
+  expect(attempt.view).toBe('busy')
+  for (let i = 0; i <= 50; i++) answer({ type: 'progress', percent: 2 * i }, 5 * i + 5)
+  answer(unlocked, 260)
+  vi.runAllTimers()
+
+  const shownPercents = percents(harness)
+  expect(shownPercents.length, 'percentages shown').toBeGreaterThan(5)
+  expect(shownPercents.at(-1)![0]).toBe(100)
+  for (const gap of gaps(shownPercents)) expect(gap).toBeGreaterThanOrEqual(FRAME)
+  expect(shownPercents.slice(1).every(([percent], i) => percent > shownPercents[i][0]), 'each change rises').toBe(true)
+  expect(shownPercents.at(-1)![1]).toBeLessThan(doneAt(shown())!)
+
+  const ticks = steps().filter(([, at]) => at > submitted)
+  expect(ticks.map(([n]) => n)).toEqual([2, 4])
+  for (const gap of gaps(ticks)) expect(gap).toBeGreaterThanOrEqual(350)
+})
+
+test('a restricted PDF’s progress shows only once step 2 is active, not while step 1 waits out its floor', () => {
+  const harness = setup()
+  const { attempt, answer, steps } = harness
+  attempt.open([pdf('form.pdf')])
+  vi.advanceTimersByTime(300)
+  answer({ type: 'restricted' }, 10)
+  for (let i = 0; i <= 10; i++) answer({ type: 'progress', percent: 10 * i }, 20 + 5 * i)
+  answer(unlocked, 80)
+  vi.runAllTimers()
+
+  const step2 = steps().find(([n]) => n === 2)![1]
+  const shownPercents = percents(harness)
+  expect(shownPercents.length).toBeGreaterThan(0)
+  expect(shownPercents[0][1]).toBeGreaterThanOrEqual(step2)
+  expect(shownPercents.at(-1)![0]).toBe(100)
+})
+
+test('a date typed at the prompt: the percentage shows only after the last count queued before it, and a try floor after it', () => {
+  const harness = setup()
+  toTries(harness)
+  harness.answer({ type: 'trying', n: 2, of: 8 }, 10)
+  harness.answer({ type: 'trying', n: 3, of: 8 }, 12)
+  harness.answer({ type: 'progress', percent: 40 }, 14)
+  harness.answer({ type: 'progress', percent: 100 }, 16)
+  harness.answer({ ...unlocked, password: '19900508', form: 'YYYYMMDD' }, 18)
+  vi.runAllTimers()
+
+  const lastCount = counts(harness).at(-1)!
+  expect(lastCount[0]).toBe(3)
+  const shownPercents = percents(harness)
+  expect(shownPercents.map(([percent]) => percent)).toEqual([100])
+  expect(shownPercents[0][1] - lastCount[1], 'ms the last count shows').toBeGreaterThanOrEqual(150)
+})
+
+test('progress that arrives before the 300 ms patience runs out shows nothing, and quick work never shows the Unlocking screen', () => {
+  const harness = setup()
+  const { attempt, answer, shown } = harness
+  attempt.open([pdf()])
+  answer({ type: 'needs-password' })
+  vi.advanceTimersByTime(0)
+  attempt.submit('secret', false)
+  answer({ type: 'progress', percent: 0 }, 10)
+  answer({ type: 'progress', percent: 100 }, 20)
+  answer(unlocked, 30)
+  vi.runAllTimers()
+
+  expect(percents(harness)).toEqual([])
+  expect(shown().map(([view]) => view)).not.toContain('busy')
+})
+
+test('a slow lock of the unlocked copy shows its progress on the Locking screen', () => {
+  const harness = setup()
+  const { attempt, answer } = harness
+  toDone(harness)
+  attempt.addPassword()
+  attempt.lock(pdf('form-unlocked.pdf'), 'hunter2')
+  answer({ type: 'progress', percent: 30 }, 100)
+  vi.advanceTimersByTime(300)
+  answer({ type: 'progress', percent: 100 }, 10)
+  answer({ type: 'locked', pdf: new Uint8Array(950) }, 20)
+  vi.runAllTimers()
+
+  expect(percents(harness).map(([percent]) => percent)).toEqual([30, 100])
+})
+
+test('an unlock that showed 100%, then a slow lock: the Locking screen starts with its note cleared and shows only the lock’s percentages', () => {
+  const harness = setup()
+  const { attempt, answer, now, calls } = harness
+  attempt.open([pdf()])
+  answer({ type: 'needs-password' })
+  vi.advanceTimersByTime(0)
+  attempt.submit('secret', false)
+  vi.advanceTimersByTime(300)
+  answer({ type: 'progress', percent: 100 }, 10)
+  answer(unlocked, 20)
+  vi.runAllTimers()
+  expect(attempt.view).toBe('done')
+  expect(percents(harness).at(-1)![0]).toBe(100)
+
+  attempt.addPassword()
+  const start = now()
+  attempt.lock(pdf('statement-unlocked.pdf'), 'hunter2')
+  vi.advanceTimersByTime(300)
+  answer({ type: 'progress', percent: 20 }, 10)
+  answer({ type: 'progress', percent: 100 }, 50)
+  answer({ type: 'locked', pdf: new Uint8Array(950) }, 60)
+  vi.runAllTimers()
+
+  const note = calls.filter(({ at, name }) => at >= start && (name === 'trying' || name === 'progress'))
+  expect(note.map(({ name, args: [value] }) => [name, value])).toEqual([
+    ['trying', null],
+    ['progress', 20],
+    ['progress', 100],
+  ])
 })

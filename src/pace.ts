@@ -11,6 +11,34 @@ export const realClock: Clock = {
   },
 }
 
+// Runs `fn` on the next animation frame, and returns a function that cancels it.
+export type Frame = (fn: () => void) => () => void
+
+export const realFrame: Frame = (fn) => {
+  const id = requestAnimationFrame(fn)
+  return () => cancelAnimationFrame(id)
+}
+
+// For a value that changes faster than the screen repaints: only the latest update runs, once a frame.
+export function createFrameLane(frame: Frame) {
+  let latest: (() => void) | null = null
+  let cancel: (() => void) | null = null
+  return {
+    push(update: () => void) {
+      latest = update
+      cancel ??= frame(() => {
+        const run = latest!
+        latest = cancel = null
+        run()
+      })
+    },
+    clear() {
+      cancel?.()
+      latest = cancel = null
+    },
+  }
+}
+
 // Each update runs at least `floor` ms after the one before it, until the pacer has added `cap` ms
 // of wait in all; after that, updates run as they arrive.
 export function createPacer(floor: number, cap = Infinity, { now, later }: Clock = realClock) {
