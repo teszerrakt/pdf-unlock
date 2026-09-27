@@ -53,6 +53,8 @@ export type Ui = {
   clear(): void
   // The set screen was left, or its lock stopped: its field empties.
   leftRelock(): void
+  // The lock failed: its field empties, and Done says the unlocked copy is still offered.
+  lockFailed(): void
   batch(files: File[], rows: RowState[]): void
   rows(rows: RowState[]): void
   copy(index: number, outcome: Unlocked): void
@@ -82,8 +84,8 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
   let tries = lane(0)
   let rows = lane(0)
 
-  function go(to: View) {
-    const direction = to === view ? null : depth[to] < depth[view] && !locking ? 'back' : 'fwd'
+  function go(to: View, back = false) {
+    const direction = to === view ? null : back || (depth[to] < depth[view] && !locking) ? 'back' : 'fwd'
     view = to
     ui.show(to, direction)
   }
@@ -164,6 +166,8 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
       case 'locked':
         ui.locked(response.pdf)
         return finish()
+      case 'lock-failed':
+        return lockFailed()
       case 'unreadable':
         return stop({ type: 'failed', text: response.message })
     }
@@ -208,7 +212,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
   }
 
   function batchAnswer(response: WorkerResponse) {
-    if (response.type === 'restricted' || response.type === 'trying' || response.type === 'locked') return
+    if (response.type === 'restricted' || response.type === 'trying' || response.type === 'locked' || response.type === 'lock-failed') return
     cancelPending()
     ui.ready()
     if (response.type === 'needs-password' || response.type === 'wrong-password') return batchStep({ type: response.type })
@@ -263,13 +267,24 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     go('pick')
   }
 
-  // Also stops a lock that started but has not reached the busy screen yet.
-  function leaveRelock() {
+  function endLock() {
     cancelPending()
     stopWorker()
     locking = false
+  }
+
+  // Also stops a lock that started but has not reached the busy screen yet.
+  function leaveRelock() {
+    endLock()
     ui.leftRelock()
     go('done')
+  }
+
+  // Back to Done, even from the Locking screen: the unlocked copy is still offered, and Add password tries again.
+  function lockFailed() {
+    endLock()
+    ui.lockFailed()
+    go('done', true)
   }
 
   return {
@@ -284,6 +299,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     crashed(from: number) {
       if (from !== worker) return
       if (run) return batchAnswer({ type: 'unreadable', message: '' })
+      if (locking) return lockFailed()
       stop({ type: 'crashed' })
     },
     open(files: File[]) {

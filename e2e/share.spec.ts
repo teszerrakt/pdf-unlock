@@ -34,12 +34,12 @@ test.describe('share target', () => {
   test('a share with no file says so', async ({ page }) => {
     await share(page)
     await expect(screen(page, 'stop')).toBeVisible()
-    await expect(page.locator('#stop-text')).toHaveText('Your browser did not pass the shared file to the app. Use Choose a PDF instead.')
+    await expect(page.locator('#stop-text')).toHaveText('Your browser did not pass the shared file to the app. Use Choose PDFs instead.')
   })
 
   test('reaching the share URL as a page says the file did not come through', async ({ page }) => {
     await page.goto('/share-target?title=x')
-    await expect(page.locator('#stop-text')).toHaveText('The share opened without its file (?title=x). Use Choose a PDF instead.')
+    await expect(page.locator('#stop-text')).toHaveText('The share opened without its file (?title=x). Use Choose PDFs instead.')
     await expect(page).toHaveURL('/')
   })
 })

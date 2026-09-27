@@ -10,12 +10,14 @@ export type WorkerRequest =
 
 // `restricted`: the file opens without a password; its restrictions are being removed.
 // `trying`: candidate `n` of `of` is being tried, after the ones before it missed.
+// `lock-failed`: the own password could not be added, for example out of memory.
 export type WorkerResponse =
   | Outcome
   | Prompt
   | { type: 'restricted' }
   | { type: 'trying'; n: number; of: number }
   | { type: 'locked'; pdf: Uint8Array }
+  | { type: 'lock-failed' }
 
 const create: CreateQpdf = async () => (await createModule({ locateFile: () => wasmUrl })) as unknown as Qpdf
 
@@ -38,7 +40,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   try {
     response = await respond(event.data)
   } catch {
-    response = { type: 'unreadable', message: 'Unlocking failed. The file may be too large for this device.' }
+    response =
+      event.data.type === 'lock'
+        ? { type: 'lock-failed' }
+        : { type: 'unreadable', message: 'Unlocking failed. The file may be too large for this device.' }
   }
   if (response.type === 'unlocked') input = null
   const transfer = 'pdf' in response ? [response.pdf.buffer as ArrayBuffer] : []

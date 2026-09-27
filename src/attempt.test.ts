@@ -33,11 +33,16 @@ function setup() {
     const from = worker
     setTimeout(() => attempt.answer(from, response), after)
   }
+  // The running worker stops with an error, `after` ms from now.
+  const crash = (after = 0) => {
+    const from = worker
+    setTimeout(() => attempt.crashed(from), after)
+  }
   const now = () => Date.now() - start
   const called = (name: keyof Ui) => calls.filter((call) => call.name === name)
   const shown = () => called('show').map(({ at, args: [view] }) => [view as View, at] as const)
   const steps = () => called('steps').map(({ at, args: [n] }) => [n as number, at] as const)
-  return { attempt, answer, now, calls, called, shown, steps, sent }
+  return { attempt, answer, crash, now, calls, called, shown, steps, sent }
 }
 
 const pdf = (name = 'statement.pdf') => new File([new Uint8Array(1000)], name, { type: 'application/pdf' })
@@ -266,4 +271,51 @@ test('an attempt abandoned by picking another file while its counts wait their t
 
   expect(since(harness, shown)).toEqual([])
   expect(called('unlocked')).toEqual([])
+})
+
+// The lock fails as the worker's thrown `lock` answer, or as the worker stopping with an error.
+const lockFailures: [string, (harness: ReturnType<typeof setup>, after: number) => void][] = [
+  ['a thrown lock', (harness, after) => harness.answer({ type: 'lock-failed' }, after)],
+  ['a worker error', (harness, after) => harness.crash(after)],
+]
+
+test.each(lockFailures)('a lock that fails with %s on the Locking screen slides back to Done with its unlocked copy, never to a stop', (_, fail) => {
+  const harness = setup()
+  const { attempt, now, called } = harness
+  toDone(harness)
+  attempt.addPassword()
+  const start = now()
+  attempt.lock(pdf('form-unlocked.pdf'), 'hunter2')
+  vi.advanceTimersByTime(300)
+  fail(harness, 10)
+  vi.runAllTimers()
+
+  expect(called('stop')).toEqual([])
+  expect(called('locked')).toEqual([])
+  expect(called('lockFailed')).toHaveLength(1)
+  const moves = called('show').filter(({ at }) => at >= start).map(({ args }) => args)
+  expect(moves).toEqual([
+    ['relock', 'fwd'],
+    ['busy', 'fwd'],
+    ['done', 'back'],
+  ])
+  expect(attempt.locking).toBe(false)
+})
+
+test.each(lockFailures)('a lock that fails with %s before the Locking screen shows slides back to Done from the set screen', (_, fail) => {
+  const harness = setup()
+  const { attempt, now, called } = harness
+  toDone(harness)
+  attempt.addPassword()
+  const start = now()
+  attempt.lock(pdf('form-unlocked.pdf'), 'hunter2')
+  fail(harness, 10)
+  vi.runAllTimers()
+
+  expect(called('stop')).toEqual([])
+  expect(called('lockFailed')).toHaveLength(1)
+  expect(called('show').filter(({ at }) => at >= start).map(({ args }) => args)).toEqual([
+    ['relock', 'fwd'],
+    ['done', 'back'],
+  ])
 })
