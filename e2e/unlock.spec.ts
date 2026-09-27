@@ -755,8 +755,9 @@ test.describe('page 1 on the Done card', () => {
 
     await enterPassword(page, 'secret')
     await expect(doneIcon(page)).toHaveClass(/\bhas-thumb\b/)
-    expect(requested.length).toBeGreaterThan(0)
     expect(requested.filter(({ done }) => !done), 'pdf.js requested before Done showed').toEqual([])
+    // Its own chunk, so pdf.js bundled into the page's script cannot pass on the worker alone.
+    expect(requested.some(({ url, done }) => pdfjsChunk.test(url) && done), 'the pdf.js chunk never loaded after Done').toBe(true)
   })
 
   test('the pdf.js chunk fails to load: Done still works and the card keeps its PDF label', async ({ page }) => {
