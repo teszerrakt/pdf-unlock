@@ -89,9 +89,12 @@ async function recordNote(page: Page) {
     const log: string[] = (window.noteLog = [])
     const note = document.getElementById('trying')!
     const busy = document.getElementById('busy')!
-    new MutationObserver(() => {
+    // The screen can appear with text the note already held, so its appearing is logged too.
+    const observer = new MutationObserver(() => {
       if (!note.hidden && !busy.hidden && note.textContent !== log.at(-1)) log.push(note.textContent!)
-    }).observe(note, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] })
+    })
+    observer.observe(note, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] })
+    observer.observe(busy, { attributes: true, attributeFilter: ['hidden'] })
   })
   return () => page.evaluate(() => window.noteLog)
 }
@@ -195,8 +198,8 @@ test('a date password that opens on its 3rd form: step 2’s note counts the dat
   expect(log.slice(firstPercent).every((text) => percentage.test(text)), `no count after the percentage: ${log}`).toBe(true)
 })
 
-test('adding a password on a slow device: the Locking screen’s step 2 note shows the percentage', async ({ page }) => {
-  await slowWorker(page, 0)
+test('adding a password on a slow device: the Locking screen’s step 2 note shows the percentage, never decreasing', async ({ page }) => {
+  await slowWorker(page, 20)
   await page.goto('/')
   await pickFile(page, 'scan.pdf', await bloatedPdf({ openPassword: 'secret' }))
   await enterPassword(page, 'secret')
@@ -211,6 +214,7 @@ test('adding a password on a slow device: the Locking screen’s step 2 note sho
 
   const values = percentages(await note())
   expect(values.length, 'percentages shown on the Locking screen').toBeGreaterThan(0)
+  expect(values.slice(1).every((value, i) => value > values[i]), `never decreases: ${values}`).toBe(true)
   expect(values.at(-1)).toBe(100)
 })
 
@@ -278,8 +282,8 @@ test('date forms count up under step 2, at least 150 ms apart, before the wrong 
   expect(Math.min(...gaps), 'ms between two counts').toBeGreaterThanOrEqual(140)
 })
 
-test('after a date form worked, adding a password shows the Locking steps with a percentage, not the try count', async ({ page }) => {
-  await slowWorker(page, 0)
+test('after a date form worked, adding a password shows the Locking steps with its own percentage, not the try count or the unlock’s', async ({ page }) => {
+  await slowWorker(page, 20)
   await page.clock.setFixedTime(new Date(2026, 8, 26, 12))
   await page.goto('/')
   await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: '05081990' }))
@@ -293,12 +297,19 @@ test('after a date form worked, adding a password shows the Locking steps with a
 
   await page.getByRole('button', { name: 'Add password', exact: true }).click()
   await page.getByLabel('New password', { exact: true }).fill('hunter2')
+  const lockNote = await recordNote(page)
   await page.evaluate(() => window.holdWorker())
   await page.getByRole('button', { name: 'Lock it', exact: true }).click()
   await expect(screen(page, 'busy')).toBeVisible()
   await expect(page.locator('#steps li').nth(1).locator('.step-label')).toHaveText('Adding your password')
-  await expect(page.locator('#trying')).toHaveText(percentage)
   await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
+
+  // The unlock ended on 100%, so a lock that starts there shows a value that is not its own.
+  const log = await lockNote()
+  expect(log.every((text) => percentage.test(text)), `only percentages: ${log}`).toBe(true)
+  const values = percentages(log)
+  expect(values[0], `the first percentage is the lock’s: ${log}`).toBeLessThan(100)
+  expect(values.slice(1).every((value, i) => value > values[i]), `never decreases: ${values}`).toBe(true)
 })
 
 test('adding an own password on a slow device ticks the Locking steps at least 350 ms apart', async ({ page }) => {

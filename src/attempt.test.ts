@@ -436,3 +436,34 @@ test('a slow lock of the unlocked copy shows its progress on the Locking screen'
 
   expect(percents(harness).map(([percent]) => percent)).toEqual([30, 100])
 })
+
+test('an unlock that showed 100%, then a slow lock: the Locking screen starts with its note cleared and shows only the lock’s percentages', () => {
+  const harness = setup()
+  const { attempt, answer, now, calls } = harness
+  attempt.open([pdf()])
+  answer({ type: 'needs-password' })
+  vi.advanceTimersByTime(0)
+  attempt.submit('secret', false)
+  vi.advanceTimersByTime(300)
+  answer({ type: 'progress', percent: 100 }, 10)
+  answer(unlocked, 20)
+  vi.runAllTimers()
+  expect(attempt.view).toBe('done')
+  expect(percents(harness).at(-1)![0]).toBe(100)
+
+  attempt.addPassword()
+  const start = now()
+  attempt.lock(pdf('statement-unlocked.pdf'), 'hunter2')
+  vi.advanceTimersByTime(300)
+  answer({ type: 'progress', percent: 20 }, 10)
+  answer({ type: 'progress', percent: 100 }, 50)
+  answer({ type: 'locked', pdf: new Uint8Array(950) }, 60)
+  vi.runAllTimers()
+
+  const note = calls.filter(({ at, name }) => at >= start && (name === 'trying' || name === 'progress'))
+  expect(note.map(({ name, args: [value] }) => [name, value])).toEqual([
+    ['trying', null],
+    ['progress', 20],
+    ['progress', 100],
+  ])
+})

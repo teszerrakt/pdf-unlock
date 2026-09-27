@@ -334,6 +334,9 @@ describe('reporting progress while writing the copy', () => {
     const pdf = await bloatedPdf({ openPassword: 'secret' })
     await expectUnlockedCopy(await unlock(createQpdf, pdf, typed('secret'), undefined, (percent) => reported.push(percent)), true)
     expectProgress(reported)
+    // The repacked run fills 0–70 and the plain run 70–100, each moving through its own band.
+    expect(reported.some((value) => value > 0 && value < 70), `a value in the repacked run's band: ${reported}`).toBe(true)
+    expect(reported.filter((value) => value > 70 && value < 100).length, `values in the plain run's band: ${reported}`).toBeGreaterThanOrEqual(2)
   })
 
   it('reports progress that never decreases and ends at 100 while locking an unlocked copy', async () => {
