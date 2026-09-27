@@ -219,7 +219,7 @@ test.describe('batch', () => {
     expect(download.suggestedFilename()).toBe('form-unlocked.pdf')
   })
 
-  // How long the toast shows, measured in the page from shown to hidden. Call `watchToast` before its action.
+  // Call `watchToast` before its action.
   async function watchToast(page: Page) {
     await page.evaluate(() => {
       const times: number[] = ((window as unknown as { toastTimes: number[] }).toastTimes = [])
@@ -583,7 +583,7 @@ test.describe('own password', () => {
 })
 
 test('a lock that fails keeps the unlocked copy: Done slides back, says so, and still offers Add password', async ({ page }) => {
-  // The worker stops with an error when asked to lock, as it does when the device runs out of memory.
+  // As when the device runs out of memory.
   await page.addInitScript(() => {
     const post = Worker.prototype.postMessage
     Worker.prototype.postMessage = function (this: Worker, message: { type: string }, options?: StructuredSerializeOptions) {

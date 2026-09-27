@@ -33,7 +33,6 @@ const doneLedes = {
   'lock-failed': 'The password couldn’t be added on this device. Your unlocked copy is still here.',
 }
 
-// The Done lede for a locked copy, for an unlocked copy whose lock failed, or for an unlocked copy.
 // `saved`: bytes the repack took off an input `of` bytes long. It is named at 5% of `of`.
 export function doneText(copy: keyof typeof doneLedes): string
 export function doneText(fileName: string, hadPassword: boolean, saved?: number, options?: DoneOptions): string
@@ -45,9 +44,7 @@ export function doneText(fileName: string, hadPassword?: boolean, saved = 0, { o
   return `${fileName} had no open password, only print or copy limits. This copy has none${smaller ? `, and is ${smaller} smaller` : ''}.`
 }
 
-export type Toast = { text: string; ms: number }
-
-// What Save all says when its zip cannot be made: `storeZip` throws a RangeError past what one zip holds.
-export function zipFailed(error: unknown): Toast | null {
+// `storeZip` throws a RangeError past what one zip holds.
+export function zipFailed(error: unknown): { text: string; ms: number } | null {
   return error instanceof RangeError ? { text: 'Too big for one zip. Save them one by one.', ms: 4000 } : null
 }

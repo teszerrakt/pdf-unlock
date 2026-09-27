@@ -166,10 +166,8 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
       case 'locked':
         ui.locked(response.pdf)
         return finish()
-      case 'lock-failed':
-        return lockFailed()
       case 'unreadable':
-        return stop({ type: 'failed', text: response.message })
+        return locking ? lockFailed() : stop({ type: 'failed', text: response.message })
     }
   }
 
@@ -212,7 +210,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
   }
 
   function batchAnswer(response: WorkerResponse) {
-    if (response.type === 'restricted' || response.type === 'trying' || response.type === 'locked' || response.type === 'lock-failed') return
+    if (response.type === 'restricted' || response.type === 'trying' || response.type === 'locked') return
     cancelPending()
     ui.ready()
     if (response.type === 'needs-password' || response.type === 'wrong-password') return batchStep({ type: response.type })
@@ -280,7 +278,7 @@ export function createAttempt(ui: Ui, work: Work, { clock = realClock, reduced =
     go('done')
   }
 
-  // Back to Done, even from the Locking screen: the unlocked copy is still offered, and Add password tries again.
+  // Back even from the Locking screen, which Done sits deeper than.
   function lockFailed() {
     endLock()
     ui.lockFailed()
