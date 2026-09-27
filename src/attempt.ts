@@ -53,7 +53,7 @@ export type Ui = {
   clear(): void
   // The set screen was left, or its lock stopped: its field empties.
   leftRelock(): void
-  // The lock failed: Done says the unlocked copy is still offered.
+  // The lock failed: its field resets, and Done says the unlocked copy is still offered.
   lockFailed(): void
   batch(files: File[], rows: RowState[]): void
   rows(rows: RowState[]): void

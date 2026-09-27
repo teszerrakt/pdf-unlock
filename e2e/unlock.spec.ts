@@ -27,13 +27,6 @@ test('locked PDF with an open password: the right password gives an unlocked cop
   expect(copy.name).toBe('statement-unlocked.pdf')
 })
 
-test('one file unlocked: Done keeps the cat with the open padlock', async ({ page }) => {
-  await pickFile(page, 'statement.pdf', await lockedPdf({ openPassword: 'secret' }))
-  await enterPassword(page, 'secret')
-  await expect(screen(page, 'done')).toBeVisible()
-  await expect(page.locator('#done-art')).toHaveClass(/\bcat-3\b/)
-})
-
 test('bloated locked PDF: the Done text names the saving and the unlocked copy is smaller', async ({ page }) => {
   const pdf = await bloatedPdf({ openPassword: 'secret' })
   await pickFile(page, 'statement.pdf', pdf)
@@ -266,6 +259,7 @@ test.describe('batch', () => {
   test('a batch that unlocked at least one file shows the heap of open padlocks', async ({ page }) => {
     await threeKinds(page)
     await expect(page.locator('#batch-done-art')).toHaveClass(/\bcat-7\b/)
+    await expect(page.locator('#batch-done-art')).not.toHaveClass(/\bcat-3\b/)
   })
 
   test('two locked PDFs with the same open password: typed once with the checkbox on, no second prompt', async ({ page }) => {
@@ -485,6 +479,19 @@ test.describe('own password', () => {
     await page.getByRole('button', { name: 'Lock it', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Locked.' })).toBeVisible()
     await expect(page.locator('#done-art')).toHaveClass(/\bcat-6\b/)
+    await expect(page.locator('#done-art')).not.toHaveClass(/\bcat-3\b/)
+  })
+
+  test('one file unlocked after a locked copy: Done shows the cat with the open padlock again', async ({ page }) => {
+    await ownPassword(page).fill('hunter2')
+    await page.getByRole('button', { name: 'Lock it', exact: true }).click()
+    await expect(page.locator('#done-art')).toHaveClass(/\bcat-6\b/)
+    await page.getByRole('button', { name: 'Unlock another' }).click()
+    await pickFile(page, 'march.pdf', await lockedPdf({ openPassword: 'secret' }))
+    await enterPassword(page, 'secret')
+    await expect(page.getByRole('heading', { name: 'Unlocked.' })).toBeVisible()
+    await expect(page.locator('#done-art')).toHaveClass(/\bcat-3\b/)
+    await expect(page.locator('#done-art')).not.toHaveClass(/\bcat-6\b/)
   })
 
   test('Add password on the unlocked copy opens the set screen, Lock it waits for a password', async ({ page }) => {
@@ -596,6 +603,7 @@ test('a lock that fails keeps the unlocked copy: Done slides back, says so, and 
   await enterPassword(page, 'secret')
   await page.getByRole('button', { name: 'Add password', exact: true }).click()
   await page.getByLabel('New password', { exact: true }).fill('hunter2')
+  await page.getByRole('button', { name: 'Hide password', exact: true }).click()
   await page.getByRole('button', { name: 'Lock it', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: 'Unlocked.' })).toBeVisible()
@@ -604,4 +612,7 @@ test('a lock that fails keeps the unlocked copy: Done slides back, says so, and 
   await expect(page.getByRole('button', { name: 'Add password', exact: true })).toBeVisible()
   await expect(screen(page, 'stop')).toBeHidden()
   expect((await downloadUnlockedCopy(page)).name).toBe('statement-unlocked.pdf')
+  // The retry starts like every other visit to the set screen: the own password shows.
+  await page.getByRole('button', { name: 'Add password', exact: true }).click()
+  await expect(page.getByLabel('New password', { exact: true })).toHaveAttribute('type', 'text')
 })
