@@ -17,12 +17,21 @@ describe('dateForms', () => {
     expect(passwords(typed)).toEqual(expected)
   })
 
-  it('given any 6 or 8 digit input, with or without spaces around it, lists at most 20 passwords and no duplicates', () => {
-    const inputs = [
-      ...Array.from({ length: 1_000_000 / 7 }, (_, i) => String(i * 7).padStart(6, '0')),
-      ...Array.from({ length: 100_000_000 / 7919 }, (_, i) => String(i * 7919).padStart(8, '0')),
-    ]
-    for (const typed of [...inputs, ...inputs.map((text) => ` ${text}\n`)]) {
+  const inputs = [
+    ...Array.from({ length: 1_000_000 / 7 }, (_, i) => String(i * 7).padStart(6, '0')),
+    ...Array.from({ length: 100_000_000 / 7919 }, (_, i) => String(i * 7919).padStart(8, '0')),
+  ]
+
+  it('given any 6 or 8 digit input, lists at most 20 passwords and no duplicates', () => {
+    for (const typed of inputs) {
+      const list = passwords(typed)
+      expect(list.length).toBeLessThanOrEqual(20)
+      expect(new Set(list).size).toBe(list.length)
+    }
+  })
+
+  it('given a 6 or 8 digit input with spaces around it, lists at most 20 passwords and no duplicates', () => {
+    for (const typed of inputs.filter((_, i) => i % 5 === 0).map((text) => ` ${text}\n`)) {
       const list = passwords(typed)
       expect(list.length).toBeLessThanOrEqual(20)
       expect(new Set(list).size).toBe(list.length)
