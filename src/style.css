@@ -904,6 +904,20 @@ kbd {
   margin-top: 24px;
 }
 
+/* On a phone, the usual spacing leaves the card line under 100px beside Add password, too little
+   for "12.3 MB · 128 pages". */
+@media (max-width: 400px) {
+  .done .file-card {
+    gap: 10px;
+    padding-right: 12px;
+  }
+
+  .done .card-action {
+    padding: 0 8px;
+    gap: 4px;
+  }
+}
+
 .done .note {
   margin-top: 4px;
 }

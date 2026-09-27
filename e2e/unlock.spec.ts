@@ -44,8 +44,11 @@ test('12-page locked PDF on a phone: the Done card line shows the page count in 
   const line = page.locator('#done-info')
   await expect(line).toHaveText(/^\d+ KB · 12 pages$/)
   await expect(page.getByRole('button', { name: 'Add password', exact: true })).toBeVisible()
-  const { scrollWidth, clientWidth } = await line.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }))
-  expect(scrollWidth, 'the card line is cut off').toBeLessThanOrEqual(clientWidth)
+  const overflow = () => line.evaluate((element) => element.scrollWidth - element.clientWidth)
+  expect(await overflow(), 'the card line is cut off').toBeLessThanOrEqual(0)
+  // The fixture is a few KB; a real statement's line is longer.
+  await line.evaluate((element) => (element.textContent = '12.3 MB · 128 pages'))
+  expect(await overflow(), 'a long card line is cut off').toBeLessThanOrEqual(0)
 })
 
 test('locked PDF with an open password and a print limit: the Done text names the print limit', async ({ page }) => {
